@@ -1,11 +1,14 @@
-VDS - HAPUS SEMUA KOTAK INFORMASI KUNING
+VDS - FIX NOTIFIKASI MEMUAT DATA
 
 Perubahan:
-- Semua elemen informasi dengan class .note disembunyikan di seluruh halaman.
-- Mencakup kotak informasi pada Nota/Invoice, Dashboard, dan Manajemen Akun.
-- Fitur lain tidak diubah; paket ini meneruskan versi numeric background dan perbaikan tab website.
+- Notifikasi "Memuat data Bidding/Dana Paramita..." tetap tampil selama proses pemuatan.
+- Setelah berhasil, tampil pesan berhasil selama sekitar 2,2 detik lalu hilang otomatis.
+- Jika gagal, notifikasi gagal tampil sekitar 3,5 detik dan detail error ditampilkan.
+- Permintaan API cloud diberi batas waktu 30 detik agar tidak menggantung tanpa batas.
+- Tetap meneruskan penghapusan kotak informasi kuning dan fitur dari paket sebelumnya.
 
 Pemasangan:
 1. Backup index.html yang sekarang di GitHub.
-2. Ganti index.html dengan file dalam paket ini.
-3. Commit/push ke repository VDS dan tunggu Vercel selesai deploy.
+2. Ganti dengan index.html dari paket ini.
+3. Commit/push dan tunggu Vercel selesai deploy.
+4. Refresh website (Ctrl+F5) lalu uji Bidding dan Dana Paramita.
