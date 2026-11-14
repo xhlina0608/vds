@@ -1,18 +1,14 @@
-VDS - FIX EDIT PER ELEMEN DAN FORMAT JUMLAH RANGKAP
+VDS - PENGATURAN POSISI DAN UKURAN NOTA TERPISAH PER RANGKAP
 
-BIDDING:
-- Rangkap 1, 2, dan 3 masing-masing menyimpan teks pada slot berbeda.
-- Penyimpanan nilai dilakukan saat mengetik (oninput), bukan menunggu blur/fokus pindah.
-- Mengubah nama bidder/nominal/item/nomor/kasir pada satu rangkap tidak mengubah rangkap lain.
-
-DANA PARAMITA:
-- Hanya menampilkan 1 rangkap nota.
-- Tetap menggunakan background dan pengaturan nota Dana Paramita sendiri.
+Perbaikan:
+- Toolbar Editor Posisi sebelumnya menerapkan CSS ke semua elemen dengan kelas sama pada semua rangkap.
+- Sekarang setiap rangkap mempunyai pengaturan Kir, Atas, Font, Lebar, dan Warna sendiri.
+- Fokus/klik elemen pada rangkap 1 mengaktifkan pengaturan rangkap 1; rangkap 2 dan 3 berdiri sendiri.
+- Pengaturan disimpan dalam state.invoiceLayoutCopies dan ikut mekanisme cloud.
+- Dana Paramita tetap satu rangkap.
 
 Pemasangan:
 1. Backup index.html di GitHub.
-2. Ganti dengan index.html dari ZIP ini.
+2. Ganti dengan index.html dari ZIP.
 3. Commit/push dan tunggu Vercel deploy.
-4. Refresh dengan Ctrl+F5.
-5. Uji Bidding: edit satu kolom di rangkap 1, lalu periksa rangkap 2 dan 3.
-6. Uji Dana Paramita: pastikan hanya ada satu rangkap.
+4. Ctrl+F5, lalu uji toolbar pada setiap rangkap.
