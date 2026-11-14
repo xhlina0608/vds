@@ -1,21 +1,16 @@
-VDS BIDDING – 4 RANGKAP INVOICE
+VDS BIDDING – PERBAIKAN PRINT 2 HALAMAN
 
-Perubahan:
-- Bidding: rangkap 1, 2, dan 3 tetap di halaman A4 pertama.
-- Rangkap 4 ditambahkan di halaman A4 kedua.
-- Desain rangkap 4 menggunakan desain/background ukuran penuh seperti rangkap 1.
-- Editor kini memiliki pilihan elemen 1, 2, 3, dan 4 untuk Nama Bidder, Nominal, Nomor Barang, Nomor Invoice, dan Kasir.
-- Pengaturan posisi, font, lebar, dan warna rangkap 4 tersimpan terpisah.
-- Saat pertama kali dibuat, pengaturan rangkap 4 menyalin pengaturan rangkap 1; setelah itu dapat diedit sendiri.
-- Dana Paramita tetap hanya 1 rangkap.
+Masalah: Print Preview menampilkan 3 halaman walaupun isi invoice hanya 2 halaman. Penyebabnya ukuran A4 297mm ditambah padding atas 6mm karena perhitungan box CSS, sehingga sheet melewati batas halaman dan membuat halaman kosong tambahan.
+
+Perbaikan:
+- Ukuran .invoice-paper menggunakan box-sizing:border-box.
+- Tinggi kertas tetap tepat 297mm termasuk padding.
+- Menghapus tinggi tetap 297mm pada html/body yang bisa memicu overflow.
+- Memastikan halaman kedua tidak menambahkan page break ekstra.
 
 Pemasangan:
-1. Backup index.html yang sekarang ada di GitHub.
+1. Backup index.html di GitHub.
 2. Ganti dengan index.html dari ZIP ini.
-3. Commit/push dan tunggu Vercel selesai deploy.
-4. Buka website dan tekan Ctrl+F5.
-5. Di Nota/Invoice, cek preview halaman 1 dan 2. Rangkap 4 ada di halaman 2.
-6. Coba print preview: seharusnya tampil 2 halaman A4.
-
-Catatan:
-- Ini perubahan kode; lakukan uji print preview sebelum mencetak banyak nota.
+3. Commit/push, tunggu Vercel deploy.
+4. Refresh website dengan Ctrl+F5.
+5. Buka Print Preview. Target hasil: tepat 2 halaman A4.
