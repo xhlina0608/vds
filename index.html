@@ -239,10 +239,18 @@ async function openSite(site, inNewTab=false){
  const switchToNewTab=!inNewTab&&!!window.__switchWebsiteNewTab;
  window.__switchWebsiteNewTab=false;
  if(switchToNewTab){
-  try{localStorage.setItem('biddingViharaPortalSession',JSON.stringify({username:currentUser,role:currentRole}));}catch(e){}
+  // Handoff singkat agar tab baru bisa memakai sesi login yang sedang aktif.
+  // Token hanya disimpan sementara dan langsung dihapus oleh tab tujuan.
+  const handoffKey='vdsWebsiteTabHandoff';
+  try{
+   localStorage.setItem(handoffKey,JSON.stringify({
+    token:vdsAccessToken,username:currentUser,role:currentRole,
+    profile:currentProfile,site:site,expires:Date.now()+60000
+   }));
+  }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
   const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
   const opened=window.open(target,'_blank');
-  if(!opened)alert('Tab baru diblokir browser. Izinkan pop-up untuk file ini, lalu coba lagi.');
+  if(!opened){localStorage.removeItem(handoffKey);alert('Tab baru diblokir browser. Izinkan pop-up untuk website ini, lalu coba lagi.');}
   return;
  }
  if(!isAdmin()&&!hasPermission(site==='bidding'?'siteBidding':'siteDana')){alert('Akses ke website ini belum diberikan oleh Admin.');return;}
@@ -264,7 +272,7 @@ async function openSite(site, inNewTab=false){
  const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
  setRoleUI();go('dashboard');
 }
-function backToPortal(){if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
+function backToPortal(){if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
 function logout(){currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
@@ -966,4 +974,30 @@ persist();if(parsed.invoiceLayout&&typeof parsed.invoiceLayout==='object'){invoi
 function download(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
 function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.XLSX){alert('Library Excel belum termuat. Pastikan internet aktif lalu refresh.');return}const reader=new FileReader();reader.onload=ev=>{const book=XLSX.read(ev.target.result,{type:'array'});const get=(name)=>book.Sheets[name]?XLSX.utils.sheet_to_json(book.Sheets[name],{header:1,defval:''}):[];const p=get('DAFTAR HARGA').slice(6).filter(r=>r[1]).map((r,i)=>({no:r[0]||i+1,name:r[1],stock:Number(r[2]||0),price:Number(r[3]||0)}));const spName=book.SheetNames.find(n=>n.includes('DATABASE SPONSOR'));const sp=spName?get(spName).slice(1).filter(r=>r[1]||r[2]).map((r,i)=>({no:r[0]||i+1,name:r[1],goods:r[2]})):[];const liveName=book.SheetNames.find(n=>n.includes('LIVE LAPORAN DANA'));const live=liveName?get(liveName).slice(1).filter(r=>r[3]||Number(r[6])>0).map((r,i)=>({id:'import-'+(r[0]||i),invoice:r[0]||String(2601+i),bidNo:r[1]||'',itemName:r[2]||'',bidder:r[3]||'',price:Number(r[4]||0),qty:Number(r[5]||1),total:Number(r[6]||0),payment:String(r[8]||'').toUpperCase(),date:'',staff:'',cashier:''})):[];if(p.length)state.prices=p;if(sp.length)state.sponsors=sp;if(live.length)state.transactions=live;persist();alert('Import selesai. Daftar Harga, Sponsor, dan transaksi yang memiliki data terbaca telah dimuat. Periksa hasil import sebelum digunakan.');go('prices')};reader.readAsArrayBuffer(file);e.target.value=''}
 // Cloud session is kept in sessionStorage; login is required in each new browser tab.
+
+// Buka website tujuan di tab baru tanpa meminta login ulang.
+// Hash hanya membawa nama website; token diambil dari handoff sementara di localStorage.
+(function receiveWebsiteTabHandoff(){
+ const match=location.hash.match(/(?:^|[#&])open-site=([^&]+)/);
+ if(!match)return;
+ const requestedSite=decodeURIComponent(match[1]||'');
+ const key='vdsWebsiteTabHandoff';
+ let data=null;
+ try{data=JSON.parse(localStorage.getItem(key)||'null');localStorage.removeItem(key);}catch(e){}
+ history.replaceState(null,'',location.pathname+location.search);
+ if(!data||!data.token||!data.username||!['bidding','dana'].includes(requestedSite)||
+    data.site!==requestedSite||!data.expires||Date.now()>data.expires){
+  alert('Sesi untuk tab baru tidak tersedia atau sudah kedaluwarsa. Silakan login kembali.');
+  return;
+ }
+ vdsAccessToken=data.token;
+ sessionStorage.setItem('vds_access_token',vdsAccessToken);
+ currentUser=data.username;
+ currentRole=String(data.role||'user').toLowerCase();
+ currentProfile=data.profile||{username:currentUser,role:currentRole};
+ document.getElementById('login').style.display='none';
+ document.getElementById('sitePortal').style.display='none';
+ openSite(requestedSite,true).catch(e=>{alert('Gagal membuka website: '+(e.message||e));});
+})();
+
 </script></body></html>
