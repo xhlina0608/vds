@@ -1,0 +1,2 @@
+[functions.vds-api]
+verify_jwt = false

@@ -1,43 +1,81 @@
-# VDS Online – Supabase backend preparation
+# SIAKANG VDS — V83 Cloud Integration (deployment candidate)
 
-This package is a backend implementation package for the existing V83 app. It is **not yet a drop-in replacement for the website frontend**.
+This package contains the V83 frontend modified to use the Supabase Edge Function `vds-api` for username/password login, user administration, and shared Bidding/Dana state.
 
-## Included
-- `supabase/vds_schema.sql`: schema extension and client-deny policies.
-- `supabase/functions/vds-api/index.ts`: one Edge Function supporting username login, one-time admin bootstrap, password change, user management, and separate Bidding/Dana state load/save.
+## Important status
 
-## Project configuration
-Project URL: `https://gmpedvbzmgrpwsgsyszj.supabase.co`
+- The HTML JavaScript was syntax-checked with `node --check`.
+- The Edge Function and SQL have not been deployed against your live Supabase project from this workspace; a real login and two-device test are still required.
+- Do not replace the current live site until the backend steps below are complete and a backup has been made.
+- This version uses a manual **Muat Ulang Cloud** action rather than realtime subscriptions or rapid polling to limit egress.
+- State writes are debounced by 1.4 seconds. A save sends the selected workspace JSON as one payload. This minimizes request count, but large datasets still use bandwidth.
+- Existing local browser data is migrated automatically only when that workspace's cloud row is empty. Once cloud data exists, it is not silently overwritten by local data.
+- Invoice background/layout preferences remain browser-local in this candidate; transaction and workspace state are cloud-backed.
 
-The publishable key is intended for browser use, but this backend uses it only as the Auth public key. Never put the service-role key in HTML, GitHub, or Vercel public variables.
+## Project settings used
 
-## Important existing database assumptions
-The earlier SQL setup created `public.profiles` and `public.app_state`. The schema file here adds missing columns and denies direct browser access; all access is routed through the Edge Function. Existing RLS policies with different names may remain, so review policies in Supabase before production.
+- Supabase URL: `https://gmpedvbzmgrpwsgsyszj.supabase.co`
+- Vercel URL: `https://vds-black.vercel.app`
+- GitHub repository: `VDS`
+- Admin username: `septino`
+- User login does not require entering an email. The backend creates internal synthetic addresses ending in `vds.invalid`.
 
-## Deploy the function
-1. Install Supabase CLI and sign in.
-2. Link the project: `supabase link --project-ref gmpedvbzmgrpwsgsyszj`
-3. Set Edge Function secrets in Supabase Dashboard > Edge Functions > Secrets:
-   - `SUPABASE_URL`
-   - `SUPABASE_ANON_KEY` (use the project's anon/publishable key)
-   - `SUPABASE_SERVICE_ROLE_KEY` (server-side secret only)
-   - `VDS_BOOTSTRAP_SECRET` (a long random one-time secret)
-4. Deploy: `supabase functions deploy vds-api`
-5. Run `vds_schema.sql` in Supabase SQL Editor.
-6. Bootstrap admin by POSTing to `/functions/v1/vds-api` with header `x-vds-bootstrap-secret` and JSON:
-   `{"action":"bootstrap-admin","password":"CHOOSE_A_STRONG_ADMIN_PASSWORD"}`
-   Admin username is `septino`. Do not use `123456` for the administrator.
-7. Login action: `{"action":"login","username":"septino","password":"..."}`.
+The publishable key is embedded in the browser HTML. This is intended for public client use. Never put the Supabase `service_role` key in `index.html`, GitHub, or Vercel frontend environment variables.
 
-## API actions
-- `bootstrap-admin` (one-time secret header)
-- `login`
-- `change-password` (Bearer Supabase access token)
-- `list-users` (Admin only)
-- `create-user` (Admin only; defaults temporary password to `123456`)
-- `update-user` (Admin only; active and/or permissions)
-- `reset-password` (Admin only; defaults to `123456` and forces password change)
-- `get-state` / `save-state` (Bearer access token; checks Bidding/Dana site permission)
+## Deploy Supabase backend
 
-## Critical status
-The V83 HTML has not yet been rewritten to call these actions. In particular, its old localStorage account functions and synchronous `persist()` remain. Do not deploy this backend package as if the website were already integrated. The next frontend integration step must replace login, account CRUD, startup state loading, and persistence, then test two separate browser sessions.
+1. In Supabase SQL Editor, run `supabase/vds_schema.sql`.
+2. Install Supabase CLI and log in, then link the project:
+
+   ```bash
+   supabase login
+   supabase link --project-ref gmpedvbzmgrpwsgsyszj
+   ```
+
+3. In Supabase Dashboard > Project Settings > API, copy the **service_role secret** and the legacy **anon public** key. Do not send either secret in chat.
+4. Set function secrets locally in your terminal (replace the placeholders):
+
+   ```bash
+   supabase secrets set SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_SECRET" SUPABASE_ANON_KEY="YOUR_ANON_PUBLIC_KEY" VDS_BOOTSTRAP_SECRET="A_LONG_RANDOM_ONE_TIME_SECRET"
+   ```
+
+   `SUPABASE_URL` is normally provided by Supabase automatically. If it is not, set it to `https://gmpedvbzmgrpwsgsyszj.supabase.co`.
+
+5. Deploy the function:
+
+   ```bash
+   supabase functions deploy vds-api --no-verify-jwt
+   ```
+
+   `supabase/config.toml` also sets `verify_jwt = false`; the function itself validates bearer tokens for all protected actions and checks the one-time bootstrap secret for admin creation.
+
+## Create the first Admin
+
+After deploying the function, run this from PowerShell (replace the secret and choose a strong Admin password):
+
+```powershell
+$body = @{ action = 'bootstrap-admin'; password = 'GANTI_DENGAN_PASSWORD_ADMIN_YANG_KUAT' } | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri 'https://gmpedvbzmgrpwsgsyszj.supabase.co/functions/v1/vds-api' `
+  -Headers @{ 'Content-Type'='application/json'; 'apikey'='sb_publishable_KGUwbiUBXU69OPMWn2Irgw_RnEc9Lqp'; 'x-vds-bootstrap-secret'='ISI_SECRET_BOOTSTRAP_YANG_SAMA' } `
+  -Body $body
+```
+
+Expected result: `ok: true` and username `septino`. No user needs to create or use an email address.
+
+After successful bootstrap, remove `VDS_BOOTSTRAP_SECRET` from function secrets if you do not plan to use bootstrap again. Do not share the Admin password or bootstrap secret.
+
+## Deploy website
+
+1. Make a backup of the current GitHub repository and Vercel deployment.
+2. Upload the contents of this package's root (`index.html`, `README.md`, `.gitignore`) to the root of GitHub repository `VDS` and commit.
+3. Vercel should build as a static site: Framework Preset `Other`, Build Command empty, Output Directory `.`.
+4. Open `https://vds-black.vercel.app`, sign in as `septino`, and select Bidding or Dana Paramita.
+5. Test a harmless sample transaction. Wait for the cloud status to say **Tersimpan di cloud**. Open the site on a second computer, sign in, select the same workspace, and click **Muat Ulang Cloud**.
+
+## Egress and conflict notes
+
+- Realtime is not enabled and there is no background polling.
+- A workspace is downloaded when opened or when the user explicitly clicks **Muat Ulang Cloud**.
+- Each debounced save sends the complete workspace state JSON. For very large histories, this can still be a sizeable transfer. A future optimization would normalize transactions into rows and fetch only changed records.
+- Concurrent edits from two computers are last-write-wins at the whole-workspace level. Avoid editing the same workspace simultaneously until row-level conflict handling is implemented.

@@ -134,6 +134,7 @@ Deno.serve(async (req) => {
       const username = String(body.username || "").trim().toLowerCase();
       const password = String(body.password || "123456");
       const permissions = body.permissions && typeof body.permissions === "object" ? body.permissions : {};
+      const role = body.role === "admin" ? "admin" : "user";
       if (!validUsername(username)) return reply({ error: "Username harus 3–24 karakter: huruf, angka, titik, _ atau -." }, 400);
       if (password.length < 6) return reply({ error: "Password awal minimal 6 karakter." }, 400);
       const email = internalEmail(username);
@@ -142,8 +143,9 @@ Deno.serve(async (req) => {
       });
       if (error) throw error;
       const { error: pErr } = await adminDb.from("profiles").upsert({
-        id: data.user.id, username, role: "user", active: true,
-        permissions, must_change_password: true,
+        id: data.user.id, username, role, active: true,
+        permissions: role === "admin" ? { siteBidding: true, siteDana: true } : permissions,
+        must_change_password: true,
       }, { onConflict: "id" });
       if (pErr) throw pErr;
       return reply({ ok: true, username, temporary_password: password, must_change_password: true });
