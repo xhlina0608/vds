@@ -103,6 +103,7 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
 <button data-page="prices" onclick="go('prices')"><span>◇</span>Daftar Harga &amp; Item</button>
 <button data-page="details" onclick="go('details')"><span>∑</span>Rincian Dana</button>
+<button data-page="cleanup" onclick="go('cleanup')" class="admin-only"><span>⌫</span>Bersihkan Data Testing</button>
 </nav><div class="userbox">LOGIN SEBAGAI <b id="who">Pengguna</b><button class="soft" style="margin-top:10px;width:100%" onclick="logout()">Keluar</button></div></aside>
 <main><header class="top"><div><div class="eyebrow">Sistem administrasi bidding</div><h1 id="pageTitle">Dashboard</h1></div><div class="actions no-print"><button class="soft" id="portalSwitchBtn" onclick="backToPortal()">Pilih Website</button><button class="soft" onclick="refreshCloud()">Muat Ulang Cloud</button><button class="soft admin-only" onclick="exportExcel()">Export Excel</button><button class="soft admin-only" onclick="exportPDF()">Export PDF</button><button class="soft admin-only" id="backupBtn" onclick="exportBackup()">Backup Google Drive</button><button class="soft admin-only" id="restoreBtn" onclick="document.getElementById('restoreFile').click()">Restore Backup</button><input id="restoreFile" type="file" accept=".json,application/json" hidden onchange="restoreBackup(event)"></div></header>
 <section id="content"></section></main></div>
@@ -183,7 +184,7 @@ function setRoleUI(){
  if(isAdmin()&&!accountBtn){accountBtn=document.createElement('button');accountBtn.id='accountNav';accountBtn.dataset.page='users';accountBtn.innerHTML='<span>♙</span>Manajemen Akun';accountBtn.onclick=()=>go('users');nav.appendChild(accountBtn);}
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
- const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details'};
+ const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details',cleanup:'cleanup'};
  document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];el.style.display=(isAdmin()||hasPermission(k))?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
@@ -314,10 +315,10 @@ async function openSite(site, inNewTab=false){
 function backToPortal(){if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
 function logout(){currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
- if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
+ if((p==='users'||p==='cleanup')&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
- const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun'};
+ const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
  document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
  if(p==='users'&&!window.__vdsUsersLoaded){
    document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
@@ -340,7 +341,73 @@ if(currentPage==='history')c.innerHTML=historyPage();
 if(currentPage==='invoice')c.innerHTML=invoicePage();
 if(currentPage==='details')c.innerHTML=detailsPage();
 if(currentPage==='users')c.innerHTML=usersPage();
+if(currentPage==='cleanup')c.innerHTML=cleanupPage();
 if(currentPage==='sponsors')c.innerHTML=tablePage('DATABASE SPONSOR BARANG',['No','Nama Sponsor','Barang Sponsor'],state.sponsors,'sponsors',['no','name','goods'],'sponsor');if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls()}}
+
+function cleanupPage(){
+ if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
+ return `<div class="panel">
+  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
+  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
+  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
+   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
+   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
+   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
+   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
+   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+   <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
+   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
+  </div>
+ </div>`;
+}
+function resetOperationalArrays(target){
+ target.transactions=[];
+ target.history=[];
+ if(Array.isArray(target.items)){
+  const priceByNo=new Map((target.prices||[]).map(p=>[String(p.no),p]));
+  target.items=target.items.map(item=>{
+   const master=priceByNo.get(String(item.no));
+   const stock=Number(master?.stock??item.stock??0);
+   return {...item,bid:0,remain:stock,sum:0,return:null};
+  });
+ }
+}
+async function clearTestingData(){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data testing.');return;}
+ const ok=confirm('PERINGATAN: Semua Live Bidding, History Bidding, dan Live Laporan Dana pada KEDUA website akan dihapus. Daftar harga, item, akun, pengaturan nota, dan konfigurasi tetap disimpan. Lanjutkan?');
+ if(!ok)return;
+ const phrase=prompt('Untuk konfirmasi, ketik: HAPUS DATA TESTING');
+ if(phrase!=='HAPUS DATA TESTING'){alert('Dibatalkan. Teks konfirmasi tidak sesuai.');return;}
+ const btn=document.querySelector('#content button.danger');
+ if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
+ try{
+  for(const site of ['bidding','dana']){
+   const out=await vdsApi('get-state',{site});
+   let target=out.state&&typeof out.state==='object'?out.state:null;
+   if(!target){
+    const key=site==='dana'?'danaViharaState':'biddingViharaState';
+    try{target=JSON.parse(localStorage.getItem(key)||'null');}catch(e){target=null;}
+   }
+   if(!target)throw new Error('Data cloud '+site+' tidak ditemukan. Tidak ada data yang diubah pada website ini.');
+   resetOperationalArrays(target);
+   await vdsApi('save-state',{site,state:target});
+   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(target));}catch(e){}
+   if(currentSite===site)state=target;
+  }
+  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=true;vdsCloudLoaded.dana=true;}
+  render();
+  alert('Berhasil. Data Live Bidding, History Bidding, dan Live Laporan Dana pada kedua website sudah dikosongkan. Master data dan pengaturan tetap tersimpan.');
+ }catch(e){
+  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
+  console.error(e);
+ }finally{
+  const b=document.querySelector('#content button.danger');
+  if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
+ }
+}
+
 function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
@@ -968,7 +1035,7 @@ function changeInvoiceBackground(ev){if(!requirePermission('invoiceDesign'))retu
 function resetInvoiceBackground(){if(!requirePermission('invoiceDesign'))return;if(!confirm('Kembalikan background invoice bawaan dan posisi crop?'))return;invoiceBackground=currentSite==='dana'?danaDefaultInvoiceBackground:defaultInvoiceBackground;invoiceBgView={...invoiceBgViewDefaults};localStorage.removeItem(siteBgKey());localStorage.removeItem(invoiceBgViewKey());if(currentPage==='invoice')render()}
 
 function detailsPage(){return `<div class="cards finance-cards"><div class="card" style="background:#eaf2ff;border-color:#b8d1ff;border-top:4px solid #2563eb"><small style="color:#1d4ed8">TOTAL DANA</small><strong>${money(total())}</strong></div><div class="card" style="background:#eaf8ef;border-color:#b8e3c5;border-top:4px solid #16a34a"><small style="color:#15803d">TOTAL CASH</small><strong>${money(paid('CASH'))}</strong></div><div class="card" style="background:#eaf4ff;border-color:#bfdbfe;border-top:4px solid #0284c7"><small style="color:#0369a1">TOTAL TRANSFER</small><strong>${money(paid('TRANSFER'))}</strong></div><div class="card" style="background:#f3edff;border-color:#d8c8ff;border-top:4px solid #7c3aed"><small style="color:#6d28d9">TOTAL QRIS</small><strong>${money(paid('QRIS'))}</strong></div><div class="card" style="background:#fff5e8;border-color:#fed7aa;border-top:4px solid #ea580c"><small style="color:#c2410c">BELUM DIBAYAR</small><strong>${money(unpaid())}</strong></div></div><div class="panel"><h3>Rekonsiliasi Dana</h3><div class="formgrid" style="margin-top:14px"><div class="field"><label>Uang cash yang ada</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="cashActual" type="text" inputmode="numeric" value="${Number(state.cashActual||0).toLocaleString('id-ID')}" style="padding-left:42px" ${(!isAdmin()&&!hasPermission('cashEdit'))?'disabled title="Tidak diizinkan mengedit nominal cash"':''} oninput="formatCashActual(this)" onchange="saveCashActual(this)"></div></div><div class="field"><label>Selisih cash</label><input readonly value="${money((state.cashActual||0)-paid('CASH'))}"></div><div class="field"><label>Uang masuk rekening (otomatis)</label><input id="bankActual" type="text" readonly value="${money(paid('TRANSFER')+paid('QRIS'))}"><small style="color:#64748b">Otomatis menjumlahkan transaksi LUNAS melalui TRANSFER dan QRIS.</small></div></div></div>`}
-function invoicePage(){const admin=isAdmin();return `<div class="panel printpanel"><div class="panelhead no-print"><h3>Pilih transaksi untuk invoice</h3><select id="invoiceSelect" style="max-width:280px" onchange="selectInvoice(this.value)"><option value="">Pilih nomor nota</option>${state.transactions.map(t=>`<option value="${esc(t.id)}" ${String(selectedInvoice)===String(t.id)?'selected':''}>${esc(t.invoice)} - ${esc(t.bidder||'Tanpa nama')}</option>`).join('')}</select></div>${admin?`<div class="layout-toolbar no-print"><div><strong>Editor posisi:</strong><select id="layoutField" onchange="selectInvoiceLayoutTarget(this.value)">${(currentSite==='dana'?[['bidder_1','Nama bidder'],['amount_1','Nominal'],['item_1','Nomor barang'],['no_1','Nomor invoice'],['cashier_1','Kasir']]:[['bidder_1','Nama bidder 1'],['bidder_2','Nama bidder 2'],['bidder_3','Nama bidder 3'],['bidder_4','Nama bidder 4'],['amount_1','Nominal 1'],['amount_2','Nominal 2'],['amount_3','Nominal 3'],['amount_4','Nominal 4'],['item_1','Nomor barang 1'],['item_2','Nomor barang 2'],['item_3','Nomor barang 3'],['item_4','Nomor barang 4'],['no_1','Nomor invoice 1'],['no_2','Nomor invoice 2'],['no_3','Nomor invoice 3'],['no_4','Nomor invoice 4'],['cashier_1','Kasir 1'],['cashier_2','Kasir 2'],['cashier_3','Kasir 3'],['cashier_4','Kasir 4']]).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select><label>Kiri <input id="layoutLeft" type="number" step="0.1" oninput="changeInvoiceLayout('left',this.value)"></label><label>Atas <input id="layoutTop" type="number" step="0.1" oninput="changeInvoiceLayout('top',this.value)"></label><label>Font <input id="layoutSize" type="number" step="1" min="6" max="60" oninput="changeInvoiceLayout('size',this.value)"></label><label>Lebar <input id="layoutWidth" type="number" step="0.5" min="1" max="100" oninput="changeInvoiceLayout('width',this.value)"></label><label>Warna <input id="layoutColor" type="color" oninput="changeInvoiceLayout('color',this.value)"></label><button class="soft" onclick="document.getElementById('invoiceBgFile').click()">Ganti Background</button><label>Zoom (%) <input id="bgZoom" type="number" min="100" max="250" step="1" value="100" oninput="changeInvoiceBgView('zoom',this.value)" style="width:76px"></label><label>Crop X (%) <input id="bgX" type="number" min="-100" max="100" step="1" value="0" oninput="changeInvoiceBgView('x',this.value)" style="width:76px"></label><label>Crop Y (%) <input id="bgY" type="number" min="-100" max="100" step="1" value="0" oninput="changeInvoiceBgView('y',this.value)" style="width:76px"></label><input id="invoiceBgFile" type="file" accept="image/*" hidden onchange="changeInvoiceBackground(event)"><button class="soft" onclick="resetInvoiceBackground()">Reset BG</button><button class="soft" onclick="resetInvoiceLayout()">Reset</button></div><button class="primary" onclick="saveInvoiceEdits()" ${selectedInvoice?'':'disabled'}>SIMPAN NOTA</button><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`:`<div class="layout-toolbar user-print-toolbar no-print"><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`}<div class="note no-print">${admin?'Edit isi nota dengan klik/ketik pada tulisan di preview. Atur posisi dan tampilan melalui toolbar.':'User hanya dapat melihat dan mencetak nota. Pengeditan nota hanya tersedia untuk Admin.'}</div><div id="invoicePreview" style="margin-top:12px">${selectedInvoice?invoiceMarkup(selectedInvoice):'<div class="empty">Pilih transaksi untuk melihat nota.</div>'}</div></div>`}
+function invoicePage(){const admin=isAdmin();return `<div class="panel printpanel"><div class="panelhead no-print"><h3>Pilih transaksi untuk invoice</h3><select id="invoiceSelect" style="max-width:280px" onchange="selectInvoice(this.value)"><option value="">Pilih nomor nota</option>${state.transactions.map(t=>`<option value="${esc(t.id)}" ${String(selectedInvoice)===String(t.id)?'selected':''}>${esc(t.invoice)} - ${esc(t.bidder||'Tanpa nama')}</option>`).join('')}</select></div>${admin?`<div class="layout-toolbar no-print"><div><strong>Editor posisi:</strong><select id="layoutField" onchange="selectInvoiceLayoutTarget(this.value)"><option value="bidder_1">Nama bidder 1</option><option value="bidder_2">Nama bidder 2</option><option value="bidder_3">Nama bidder 3</option><option value="bidder_4">Nama bidder 4</option><option value="amount_1">Nominal 1</option><option value="amount_2">Nominal 2</option><option value="amount_3">Nominal 3</option><option value="amount_4">Nominal 4</option><option value="item_1">Nomor barang 1</option><option value="item_2">Nomor barang 2</option><option value="item_3">Nomor barang 3</option><option value="item_4">Nomor barang 4</option><option value="no_1">Nomor invoice 1</option><option value="no_2">Nomor invoice 2</option><option value="no_3">Nomor invoice 3</option><option value="no_4">Nomor invoice 4</option><option value="cashier_1">Kasir 1</option><option value="cashier_2">Kasir 2</option><option value="cashier_3">Kasir 3</option><option value="cashier_4">Kasir 4</option></select><label>Kiri <input id="layoutLeft" type="number" step="0.1" oninput="changeInvoiceLayout('left',this.value)"></label><label>Atas <input id="layoutTop" type="number" step="0.1" oninput="changeInvoiceLayout('top',this.value)"></label><label>Font <input id="layoutSize" type="number" step="1" min="6" max="60" oninput="changeInvoiceLayout('size',this.value)"></label><label>Lebar <input id="layoutWidth" type="number" step="0.5" min="1" max="100" oninput="changeInvoiceLayout('width',this.value)"></label><label>Warna <input id="layoutColor" type="color" oninput="changeInvoiceLayout('color',this.value)"></label><button class="soft" onclick="document.getElementById('invoiceBgFile').click()">Ganti Background</button><label>Zoom (%) <input id="bgZoom" type="number" min="100" max="250" step="1" value="100" oninput="changeInvoiceBgView('zoom',this.value)" style="width:76px"></label><label>Crop X (%) <input id="bgX" type="number" min="-100" max="100" step="1" value="0" oninput="changeInvoiceBgView('x',this.value)" style="width:76px"></label><label>Crop Y (%) <input id="bgY" type="number" min="-100" max="100" step="1" value="0" oninput="changeInvoiceBgView('y',this.value)" style="width:76px"></label><input id="invoiceBgFile" type="file" accept="image/*" hidden onchange="changeInvoiceBackground(event)"><button class="soft" onclick="resetInvoiceBackground()">Reset BG</button><button class="soft" onclick="resetInvoiceLayout()">Reset</button></div><button class="primary" onclick="saveInvoiceEdits()" ${selectedInvoice?'':'disabled'}>SIMPAN NOTA</button><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`:`<div class="layout-toolbar user-print-toolbar no-print"><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`}<div class="note no-print">${admin?'Edit isi nota dengan klik/ketik pada tulisan di preview. Atur posisi dan tampilan melalui toolbar.':'User hanya dapat melihat dan mencetak nota. Pengeditan nota hanya tersedia untuk Admin.'}</div><div id="invoicePreview" style="margin-top:12px">${selectedInvoice?invoiceMarkup(selectedInvoice):'<div class="empty">Pilih transaksi untuk melihat nota.</div>'}</div></div>`}
 const invoiceLayoutDefaults={bidder:{left:23.5,top:38.7,width:72.5,size:19,color:'#e00000'},amount:{left:26,top:50.1,width:34,size:17,color:'#111111'},item:{left:23.8,top:61.4,width:43,size:15,color:'#ff0000'},no:{left:77.6,top:49.7,width:15,size:16,color:'#0875d1'},cashier:{left:44,top:74.1,width:24,size:15,color:'#111111'}};
 const invoiceLayoutKey=()=>currentSite==='dana'?'danaViharaInvoiceLayout':'biddingViharaInvoiceLayout';
 function normalizeInvoiceLayout(value){const x=value&&typeof value==='object'?value:JSON.parse(JSON.stringify(invoiceLayoutDefaults));const out={...JSON.parse(JSON.stringify(invoiceLayoutDefaults)),...x};for(const k of Object.keys(invoiceLayoutDefaults))out[k]={...invoiceLayoutDefaults[k],...(x[k]||{})};return out}
