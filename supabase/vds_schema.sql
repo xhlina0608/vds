@@ -40,8 +40,16 @@ declare uname text;
 begin
   uname := lower(coalesce(new.raw_user_meta_data ->> 'username', split_part(new.email, '@', 1)));
   insert into public.profiles (id, username, role, active, permissions, must_change_password)
-  values (new.id, uname, 'user', true, '{}'::jsonb, true)
+  values (new.id, uname, case when uname = 'septino' then 'admin' else 'user' end, true,
+    case when uname = 'septino' then '{"siteBidding":true,"siteDana":true}'::jsonb else '{}'::jsonb end, true)
   on conflict (id) do update set username = excluded.username;
+
+  -- Akun pertama dengan username septino otomatis menjadi Admin.
+  if uname = 'septino' then
+    update public.profiles set role = 'admin', active = true,
+      permissions = '{"siteBidding":true,"siteDana":true}'::jsonb
+    where id = new.id;
+  end if;
   return new;
 end;
 $$;

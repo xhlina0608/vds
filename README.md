@@ -1,81 +1,48 @@
-# SIAKANG VDS — V83 Cloud Integration (deployment candidate)
+# SIAKANG VDS — Paket Pemasangan Browser (Supabase + GitHub + Vercel)
 
-This package contains the V83 frontend modified to use the Supabase Edge Function `vds-api` for username/password login, user administration, and shared Bidding/Dana state.
+Paket ini memakai V83 sebagai dasar. Backend menggunakan Supabase Edge Function `vds-api`; login pengguna memakai username dan password. Email `@vds.invalid` hanya alamat internal Auth, bukan email sungguhan dan tidak perlu diakses.
 
-## Important status
+## Urutan pemasangan paling mudah
 
-- The HTML JavaScript was syntax-checked with `node --check`.
-- The Edge Function and SQL have not been deployed against your live Supabase project from this workspace; a real login and two-device test are still required.
-- Do not replace the current live site until the backend steps below are complete and a backup has been made.
-- This version uses a manual **Muat Ulang Cloud** action rather than realtime subscriptions or rapid polling to limit egress.
-- State writes are debounced by 1.4 seconds. A save sends the selected workspace JSON as one payload. This minimizes request count, but large datasets still use bandwidth.
-- Existing local browser data is migrated automatically only when that workspace's cloud row is empty. Once cloud data exists, it is not silently overwritten by local data.
-- Invoice background/layout preferences remain browser-local in this candidate; transaction and workspace state are cloud-backed.
+### A. Database (sekali saja)
+1. Buka Supabase Dashboard proyek VDS → SQL Editor → New query.
+2. Buka file `supabase/vds_schema.sql` dari paket ini, salin seluruh isinya, tempel ke SQL Editor, lalu klik Run.
+3. Pastikan muncul Success.
 
-## Project settings used
+### B. Buat akun Admin pertama
+1. Supabase → Authentication → Users → Add user → Create new user.
+2. Email: `septino@vds.invalid`
+3. Password: tentukan password Admin yang kuat (minimal 10 karakter) dan simpan sendiri.
+4. Jika ada pilihan Auto Confirm User, aktifkan. Buat user.
+5. Trigger SQL akan membuat profil `septino` sebagai Admin otomatis. Tidak perlu membuat email sungguhan.
 
-- Supabase URL: `https://gmpedvbzmgrpwsgsyszj.supabase.co`
-- Vercel URL: `https://vds-black.vercel.app`
-- GitHub repository: `VDS`
-- Admin username: `septino`
-- User login does not require entering an email. The backend creates internal synthetic addresses ending in `vds.invalid`.
+### C. Buat Edge Function lewat browser (tanpa Windows/CLI)
+1. Supabase → Edge Functions → Deploy a new function → Via Editor.
+2. Function name: `vds-api`.
+3. Buka `supabase/functions/vds-api/index.ts` dari paket ini, salin seluruh isi, lalu tempel menggantikan seluruh kode contoh editor.
+4. Klik Deploy function.
+5. Setelah selesai, endpoint harus tersedia di `https://gmpedvbzmgrpwsgsyszj.supabase.co/functions/v1/vds-api`.
 
-The publishable key is embedded in the browser HTML. This is intended for public client use. Never put the Supabase `service_role` key in `index.html`, GitHub, or Vercel frontend environment variables.
+Catatan keamanan: fungsi memakai environment bawaan Supabase `SUPABASE_URL`, `SUPABASE_ANON_KEY`, dan `SUPABASE_SERVICE_ROLE_KEY`. Jangan menaruh service-role key di HTML/GitHub dan jangan mengirimkannya lewat chat. Jika environment `SUPABASE_SERVICE_ROLE_KEY` tidak tersedia di proyek, fungsi akan menampilkan error saat dipanggil; jangan menggantinya dengan key di frontend.
 
-## Deploy Supabase backend
+### D. Upload website ke GitHub dan Vercel
+1. Backup repository `VDS` dan deployment Vercel yang sekarang.
+2. Upload isi folder `website-root` dari paket ini ke root repository GitHub `VDS` (index.html, README.md, .gitignore).
+3. Commit perubahan. Vercel yang terhubung ke repository akan deploy otomatis.
+4. Buka `https://vds-black.vercel.app`, login username `septino` dengan password yang dibuat pada langkah B.
 
-1. In Supabase SQL Editor, run `supabase/vds_schema.sql`.
-2. Install Supabase CLI and log in, then link the project:
+## Data dan egress
+- Bidding dan Dana Paramita disimpan terpisah di `app_state`.
+- Tidak menggunakan realtime atau polling otomatis.
+- Pengambilan cloud dilakukan saat membuka workspace atau menekan Muat Ulang Cloud.
+- Simpan otomatis memakai debounce 1,4 detik. Setiap penyimpanan mengirim JSON seluruh workspace; ukuran data tetap memengaruhi transfer.
+- Migrasi data lokal hanya terjadi jika baris cloud workspace masih kosong. Data cloud yang sudah ada tidak ditimpa otomatis.
+- Edit bersamaan dari dua komputer masih menggunakan prinsip last-write-wins pada seluruh workspace.
 
-   ```bash
-   supabase login
-   supabase link --project-ref gmpedvbzmgrpwsgsyszj
-   ```
+## Pengujian setelah deploy
+1. Buka endpoint fungsi di browser. Jika dibuka dengan GET, respons `Method not allowed` adalah tanda fungsi ditemukan. `NOT_FOUND` berarti belum ter-deploy atau nama fungsi salah.
+2. Login di website dengan `septino`.
+3. Uji data contoh yang tidak penting. Pastikan status sinkron menyatakan tersimpan di cloud.
+4. Login dari komputer kedua, buka workspace yang sama, lalu klik Muat Ulang Cloud.
 
-3. In Supabase Dashboard > Project Settings > API, copy the **service_role secret** and the legacy **anon public** key. Do not send either secret in chat.
-4. Set function secrets locally in your terminal (replace the placeholders):
-
-   ```bash
-   supabase secrets set SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_SECRET" SUPABASE_ANON_KEY="YOUR_ANON_PUBLIC_KEY" VDS_BOOTSTRAP_SECRET="A_LONG_RANDOM_ONE_TIME_SECRET"
-   ```
-
-   `SUPABASE_URL` is normally provided by Supabase automatically. If it is not, set it to `https://gmpedvbzmgrpwsgsyszj.supabase.co`.
-
-5. Deploy the function:
-
-   ```bash
-   supabase functions deploy vds-api --no-verify-jwt
-   ```
-
-   `supabase/config.toml` also sets `verify_jwt = false`; the function itself validates bearer tokens for all protected actions and checks the one-time bootstrap secret for admin creation.
-
-## Create the first Admin
-
-After deploying the function, run this from PowerShell (replace the secret and choose a strong Admin password):
-
-```powershell
-$body = @{ action = 'bootstrap-admin'; password = 'GANTI_DENGAN_PASSWORD_ADMIN_YANG_KUAT' } | ConvertTo-Json
-Invoke-RestMethod -Method Post `
-  -Uri 'https://gmpedvbzmgrpwsgsyszj.supabase.co/functions/v1/vds-api' `
-  -Headers @{ 'Content-Type'='application/json'; 'apikey'='sb_publishable_KGUwbiUBXU69OPMWn2Irgw_RnEc9Lqp'; 'x-vds-bootstrap-secret'='ISI_SECRET_BOOTSTRAP_YANG_SAMA' } `
-  -Body $body
-```
-
-Expected result: `ok: true` and username `septino`. No user needs to create or use an email address.
-
-After successful bootstrap, remove `VDS_BOOTSTRAP_SECRET` from function secrets if you do not plan to use bootstrap again. Do not share the Admin password or bootstrap secret.
-
-## Deploy website
-
-1. Make a backup of the current GitHub repository and Vercel deployment.
-2. Upload the contents of this package's root (`index.html`, `README.md`, `.gitignore`) to the root of GitHub repository `VDS` and commit.
-3. Vercel should build as a static site: Framework Preset `Other`, Build Command empty, Output Directory `.`.
-4. Open `https://vds-black.vercel.app`, sign in as `septino`, and select Bidding or Dana Paramita.
-5. Test a harmless sample transaction. Wait for the cloud status to say **Tersimpan di cloud**. Open the site on a second computer, sign in, select the same workspace, and click **Muat Ulang Cloud**.
-
-## Egress and conflict notes
-
-- Realtime is not enabled and there is no background polling.
-- A workspace is downloaded when opened or when the user explicitly clicks **Muat Ulang Cloud**.
-- Each debounced save sends the complete workspace state JSON. For very large histories, this can still be a sizeable transfer. A future optimization would normalize transactions into rows and fetch only changed records.
-- Concurrent edits from two computers are last-write-wins at the whole-workspace level. Avoid editing the same workspace simultaneously until row-level conflict handling is implemented.
+Jangan menghapus backup V83 asli sampai tes dua komputer berhasil. Paket ini adalah kandidat pemasangan; keberhasilan deployment dan uji dua komputer harus dikonfirmasi pada proyek live.

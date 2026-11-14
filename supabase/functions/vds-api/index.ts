@@ -3,7 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BOOTSTRAP_SECRET = Deno.env.get("VDS_BOOTSTRAP_SECRET")!;
 const adminDb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -13,7 +12,7 @@ const authClient = createClient(SUPABASE_URL, ANON_KEY, {
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-vds-bootstrap-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
@@ -54,30 +53,6 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = String(body.action || "");
 
-    if (action === "bootstrap-admin") {
-      if (!BOOTSTRAP_SECRET || req.headers.get("x-vds-bootstrap-secret") !== BOOTSTRAP_SECRET)
-        return reply({ error: "Bootstrap secret tidak cocok." }, 401);
-      const username = "septino";
-      const password = String(body.password || "");
-      if (password.length < 10) return reply({ error: "Password Admin awal minimal 10 karakter." }, 400);
-      const email = internalEmail(username);
-      const { data: existing } = await adminDb.auth.admin.listUsers({ page: 1, perPage: 1000 });
-      let user = existing.users.find((u) => u.email?.toLowerCase() === email);
-      if (!user) {
-        const { data, error } = await adminDb.auth.admin.createUser({
-          email, password, email_confirm: true, user_metadata: { username },
-        });
-        if (error) throw error;
-        user = data.user;
-      }
-      const { error: pErr } = await adminDb.from("profiles").upsert({
-        id: user.id, username, role: "admin", active: true,
-        must_change_password: false,
-        permissions: { siteBidding: true, siteDana: true },
-      }, { onConflict: "id" });
-      if (pErr) throw pErr;
-      return reply({ ok: true, username, message: "Admin septino berhasil disiapkan. Login dengan username dan password yang ditetapkan." });
-    }
 
     if (action === "login") {
       const username = String(body.username || "").trim().toLowerCase();
