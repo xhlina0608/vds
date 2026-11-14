@@ -1,18 +1,14 @@
-VDS - OPTIMASI WAKTU LOGIN
+VDS - Invoice Background Crop & Drag
 
-Perubahan:
-- Menghapus request list-users dari proses login Admin.
-- Daftar akun sekarang baru dimuat ketika menu Manajemen Akun dibuka.
-- Proses login tetap memverifikasi username/password ke Supabase; tidak ada bypass keamanan.
-- Data transaksi, Bidding, Dana Paramita, dan fitur lain tidak sengaja diubah.
+Cara memasang:
+1. Ekstrak ZIP ini.
+2. Ganti file index.html di repository GitHub VDS dengan index.html dari paket ini.
+3. Commit perubahan dan tunggu Vercel selesai deploy.
+4. Buka VDS > pilih Bidding atau Dana Paramita > Nota / Invoice.
+5. Pilih transaksi agar preview nota muncul.
+6. Klik dan tarik bagian background yang kosong untuk menggeser gambar.
+7. Gunakan Zoom, Crop X, dan Crop Y untuk mengatur potongan gambar dengan lebih presisi.
+8. Klik SIMPAN NOTA untuk menyimpan perubahan nota.
 
-Cara pakai:
-1. Backup website/repository VDS yang sedang aktif.
-2. Ganti file index.html di repository dengan index.html dari paket ini.
-3. Commit/push ke GitHub, lalu tunggu Vercel selesai deploy.
-4. Tes login. Menu Manajemen Akun akan mengambil data ketika pertama kali dibuka.
-
-Catatan:
-Target <1 detik tidak bisa dijamin karena verifikasi password tetap perlu komunikasi dengan Supabase
-dan dipengaruhi koneksi internet/server. Optimasi ini menghilangkan satu request tambahan yang
-sebelumnya dijalankan setiap kali Admin login.
+Pengaturan crop/zoom disimpan terpisah pada browser untuk Bidding dan Dana Paramita.
+Reset BG mengembalikan background bawaan dan posisi crop ke awal.
