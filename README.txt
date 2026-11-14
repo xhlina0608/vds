@@ -1,18 +1,20 @@
-VDS Bidding - perbaikan print 2 halaman dan sesi login
+FIX HALAMAN KOSONG PRINT INVOICE BIDDING
 
-Isi:
-- index.html
+Penyebab yang ditemukan:
+Elemen kertas A4 pertama sudah memiliki tinggi satu halaman penuh (297 mm),
+tetapi elemen kertas kedua juga diberi break-before: page. Pada Chrome/Firefox,
+kombinasi ini dapat menghasilkan satu halaman kosong di antaranya.
 
-Perubahan:
-1. Mengatur rangkap 4 mulai halaman 2 secara eksplisit dan menghilangkan page-break
-   setelah lembar pertama agar browser tidak menyisipkan halaman kosong.
-2. Token login disimpan di localStorage dan diverifikasi ke Supabase saat website
-   dibuka kembali. Jika belum logout dan token masih valid, website membuka kembali
-   workspace terakhir. Tombol Keluar tetap menghapus sesi tersimpan.
+Perbaikan:
+Menghapus paksa page-break-before pada lembar kedua. Karena lembar pertama
+sudah tepat satu tinggi A4, lembar kedua akan otomatis dimulai di halaman 2.
 
-Deploy:
-- Ganti index.html di repository GitHub VDS dengan file ini.
-- Tunggu Vercel selesai deploy.
-- Buka website dan lakukan Ctrl+F5.
-Catatan: sesi tetap bergantung pada masa berlaku access token di backend; bila token
-kedaluwarsa, pengguna perlu login kembali.
+Cara update:
+1. Ganti index.html di repository GitHub VDS dengan file ini.
+2. Tunggu deployment Vercel selesai.
+3. Buka invoice, tekan Ctrl+F5, lalu Print Preview.
+4. Pastikan ukuran kertas A4, Scale Fit to page width, Margins None.
+
+Target:
+Halaman 1 = rangkap 1, 2, 3.
+Halaman 2 = rangkap 4.
