@@ -1,17 +1,17 @@
-PERBAIKAN AKHIR HALAMAN KOSONG KETIGA - INVOICE BIDDING
+PERBAIKAN PRINT INVOICE VDS — BIDDING & DANA PARAMITA
 
-Perubahan:
-- Tinggi lembar invoice saat print diubah dari 297 mm menjadi 296 mm untuk
-  menghindari overflow pembulatan ukuran fisik halaman pada browser.
-- Hanya lembar pertama yang membuat page break setelahnya.
-- Lembar kedua tidak membuat page break tambahan dan menjadi halaman terakhir.
-- Isi dan ukuran elemen invoice tetap menggunakan skala desain yang sama.
+Perbaikan pada versi ini:
+1. Bidding: rangkap 1–3 tetap di halaman 1 dan rangkap 4 di halaman 2.
+2. Dana Paramita: hanya 1 rangkap dan tidak diberi page break paksa, sehingga tidak menghasilkan halaman 2 kosong.
+3. Pemisah halaman hanya diterapkan untuk website Bidding, bukan untuk Dana Paramita.
+4. Tinggi kertas invoice mengikuti isi rangkap; tidak dipaksa setinggi A4 penuh.
 
-Hasil yang dituju:
-Halaman 1: rangkap 1, 2, 3
-Halaman 2: rangkap 4
-Tidak ada halaman 3 kosong.
+Cara update:
+- Ganti index.html pada repository GitHub VDS dengan index.html dari ZIP ini.
+- Tunggu deployment Vercel selesai.
+- Buka website lalu tekan Ctrl+F5 sebelum mencoba Print Preview.
+- Pilih kertas A4, Scale Fit to page width, dan Margins None.
 
-Update:
-Ganti index.html di GitHub, tunggu Vercel deploy, lalu Ctrl+F5 sebelum membuka
-Print Preview lagi.
+Target preview:
+- Bidding: 2 halaman (halaman 1 rangkap 1–3, halaman 2 rangkap 4), tanpa halaman kosong tambahan.
+- Dana Paramita: 1 halaman (1 rangkap), tanpa halaman kosong kedua.
