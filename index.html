@@ -58,9 +58,9 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
  .invoice-copy-wide .invoice{width:196mm!important;height:83.47mm!important}
  .invoice-copy-third{width:95mm!important;height:91.4mm!important;aspect-ratio:auto!important;margin:0!important;overflow:hidden!important}
  .invoice-third{width:95mm!important;height:91.4mm!important}
- .inv3field{font-size:1.8mm!important;line-height:1.05!important}
- .inv3bidder{font-size:2.1mm!important}
- .inv3field:focus{outline:0!important;background:transparent!important}
+ .inv3field{line-height:1.05!important}
+ .inv3bidder{font-size:inherit!important}
+ .inv3field{font-size:var(--invoice-copy-font-size, inherit)!important}\n .inv3field:focus{outline:0!important;background:transparent!important}
 }
 .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700}
 
@@ -978,7 +978,16 @@ function applyInvoiceLayout(){
   const layout=invoiceLayoutCopies[String(copyIndex)]||invoiceLayout;
   const selector=copyIndex===3?'.invoice-third[data-copy-index="3"]':'.invoice[data-copy-index="'+copyIndex+'"]';
   const root=document.querySelector(selector);if(!root)return;
-  Object.keys(map).forEach(k=>{const el=root.querySelector('.'+map[k]),v=layout[k];if(el&&v){el.style.left=v.left+'%';el.style.top=v.top+'%';el.style.width=v.width+'%';el.style.fontSize=v.size+'px';el.style.color=v.color}});
+  Object.keys(map).forEach(k=>{
+   const cls=copyIndex===3?('inv3'+k):map[k];
+   const el=root.querySelector('.'+cls),v=layout[k];
+   if(el&&v){
+    el.style.left=v.left+'%';el.style.top=v.top+'%';el.style.width=v.width+'%';
+    // Keep the same numeric font size in preview and print; do not let print CSS shrink copy 3.
+    el.style.setProperty('font-size',v.size+'px','important');
+    el.style.color=v.color;
+   }
+  });
  });
 }
 function selectInvoiceLayoutTarget(target){

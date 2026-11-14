@@ -1,10 +1,17 @@
-PERBAIKAN EDITOR NOTA VDS
+VDS – PERBAIKAN UKURAN PREVIEW DAN PRINT RANGKAP KETIGA
 
-Perbaikan inti:
-- Elemen pada rangkap ketiga sekarang menggunakan kelas editor yang sama dengan rangkap 1 dan 2.
-- Saat elemen rangkap ketiga diklik, dropdown otomatis memilih elemen + rangkap 3.
-- Posisi, ukuran font, lebar, dan warna untuk rangkap ketiga kini ikut diterapkan oleh applyInvoiceLayout.
-- Data teks tiap rangkap tetap disimpan pada invoiceCopies dengan indeks 1, 2, dan 3.
-- Dana Paramita tetap 1 rangkap; Bidding tetap 3 rangkap.
+Perbaikan:
+- Font rangkap ketiga tidak lagi dipaksa menjadi 1.8mm / 2.1mm saat print.
+- Ukuran font rangkap ketiga mengikuti angka Font pada toolbar editor.
+- Pemetaan editor rangkap ketiga diarahkan ke elemen inv3 masing-masing, bukan kelas rangkap 1/2.
+- Posisi, lebar, warna, dan ukuran font tetap mengikuti setting rangkap yang dipilih.
 
-Ganti index.html pada project GitHub, commit/push, tunggu Vercel selesai deploy, lalu refresh dengan Ctrl+F5.
+Pemasangan:
+1. Backup index.html yang sekarang di GitHub.
+2. Ganti index.html dengan file dari ZIP ini.
+3. Commit/push dan tunggu Vercel selesai deploy.
+4. Buka website, tekan Ctrl+F5.
+5. Pilih Nama bidder 3 / Nominal 3 / dan elemen rangkap 3 lain, atur Font.
+6. Buka Print Preview dan bandingkan ukuran rangkap ketiga.
+
+Catatan: Perubahan ini memperbaiki CSS/JavaScript yang membuat font copy 3 mengecil saat print.
