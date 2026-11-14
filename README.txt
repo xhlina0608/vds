@@ -1,16 +1,18 @@
-VDS BIDDING – PERBAIKAN PRINT 2 HALAMAN
+VDS Bidding - perbaikan print 2 halaman dan sesi login
 
-Masalah: Print Preview menampilkan 3 halaman walaupun isi invoice hanya 2 halaman. Penyebabnya ukuran A4 297mm ditambah padding atas 6mm karena perhitungan box CSS, sehingga sheet melewati batas halaman dan membuat halaman kosong tambahan.
+Isi:
+- index.html
 
-Perbaikan:
-- Ukuran .invoice-paper menggunakan box-sizing:border-box.
-- Tinggi kertas tetap tepat 297mm termasuk padding.
-- Menghapus tinggi tetap 297mm pada html/body yang bisa memicu overflow.
-- Memastikan halaman kedua tidak menambahkan page break ekstra.
+Perubahan:
+1. Mengatur rangkap 4 mulai halaman 2 secara eksplisit dan menghilangkan page-break
+   setelah lembar pertama agar browser tidak menyisipkan halaman kosong.
+2. Token login disimpan di localStorage dan diverifikasi ke Supabase saat website
+   dibuka kembali. Jika belum logout dan token masih valid, website membuka kembali
+   workspace terakhir. Tombol Keluar tetap menghapus sesi tersimpan.
 
-Pemasangan:
-1. Backup index.html di GitHub.
-2. Ganti dengan index.html dari ZIP ini.
-3. Commit/push, tunggu Vercel deploy.
-4. Refresh website dengan Ctrl+F5.
-5. Buka Print Preview. Target hasil: tepat 2 halaman A4.
+Deploy:
+- Ganti index.html di repository GitHub VDS dengan file ini.
+- Tunggu Vercel selesai deploy.
+- Buka website dan lakukan Ctrl+F5.
+Catatan: sesi tetap bergantung pada masa berlaku access token di backend; bila token
+kedaluwarsa, pengguna perlu login kembali.
