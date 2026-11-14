@@ -1,14 +1,14 @@
-VDS - Invoice Background Crop & Drag
+VDS - PENGATURAN BACKGROUND NOTA DENGAN ANGKA
 
-Cara memasang:
-1. Ekstrak ZIP ini.
-2. Ganti file index.html di repository GitHub VDS dengan index.html dari paket ini.
-3. Commit perubahan dan tunggu Vercel selesai deploy.
-4. Buka VDS > pilih Bidding atau Dana Paramita > Nota / Invoice.
-5. Pilih transaksi agar preview nota muncul.
-6. Klik dan tarik bagian background yang kosong untuk menggeser gambar.
-7. Gunakan Zoom, Crop X, dan Crop Y untuk mengatur potongan gambar dengan lebih presisi.
-8. Klik SIMPAN NOTA untuk menyimpan perubahan nota.
+Menggantikan slider/drag dengan kolom angka:
+- Zoom (%) : 100 sampai 250 (100 = ukuran normal)
+- Crop X (%) : -100 sampai 100
+- Crop Y (%) : -100 sampai 100
 
-Pengaturan crop/zoom disimpan terpisah pada browser untuk Bidding dan Dana Paramita.
-Reset BG mengembalikan background bawaan dan posisi crop ke awal.
+Pengaturan tetap memakai kunci penyimpanan terpisah untuk Bidding dan Dana Paramita
+yang sudah ada pada versi sebelumnya.
+
+Pemasangan:
+1. Backup index.html di repository GitHub VDS.
+2. Ganti index.html dengan file dari paket ini.
+3. Commit/push ke GitHub dan tunggu Vercel deploy.
