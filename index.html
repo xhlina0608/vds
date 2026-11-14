@@ -205,14 +205,16 @@ async function login(){
   const out=await vdsApi('login',{username:n,password:p},'');
   vdsAccessToken=out.session.access_token;sessionStorage.setItem('vds_access_token',vdsAccessToken);
   currentProfile=out.user;currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();
-  accounts=[];err.style.display='none';document.getElementById('login').style.display='none';
+  // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
+  // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
+  accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
+  err.style.display='none';document.getElementById('login').style.display='none';
   if(out.user.must_change_password){
     const next=prompt('Ini login pertama. Buat password baru (minimal 8 karakter):');
     if(!next||next.length<8){alert('Password baru minimal 8 karakter. Silakan login kembali setelah siap menggantinya.');logout();return;}
     await vdsApi('change-password',{newPassword:next});
     alert('Password berhasil diganti.');
   }
-  if(isAdmin())await vdsLoadUsers();
   if(!isAdmin()){
    const canBidding=hasPermission('siteBidding'),canDana=hasPermission('siteDana');
    if(canBidding!==canDana){await openSite(canBidding?'bidding':'dana');return;}
@@ -227,6 +229,8 @@ async function login(){
 async function vdsLoadUsers(){
  const out=await vdsApi('list-users');
  accounts=(out.users||[]).map(u=>({...u,createdAt:u.created_at,password:undefined}));
+ window.__vdsUsersLoaded=true;
+ return accounts;
 }
 
 async function openSite(site, inNewTab=false){
@@ -249,6 +253,7 @@ async function openSite(site, inNewTab=false){
  vdsSyncNote('Memuat data '+(site==='dana'?'Dana Paramita':'Bidding')+'…');
  try{await vdsLoadCloud(site);}catch(e){alert('Tidak dapat memuat data cloud: '+e.message+'\nData lokal tidak akan ditimpa.');return;}
  invoiceBackground=localStorage.getItem(siteBgKey())||(site==='dana'?danaDefaultInvoiceBackground:defaultInvoiceBackground);
+ loadInvoiceLayoutForSite(site);
  document.getElementById('sitePortal').style.display='none';document.getElementById('app').style.display='grid';
  const title=site==='dana'?'DANA PARAMITA':'BIDDING 2026';
  document.querySelector('.brand b').textContent=site==='dana'?'泰安廟 · DANA PARAMITA':'泰安廟 · BIDDING';
@@ -265,7 +270,17 @@ function go(p){
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
  const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun'};
- document.getElementById('pageTitle').textContent=names[p]||'Dashboard';render();
+ document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
+ if(p==='users'&&!window.__vdsUsersLoaded){
+   document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
+   if(!window.__vdsUsersLoading){
+     window.__vdsUsersLoading=true;
+     vdsLoadUsers().then(()=>{window.__vdsUsersLoading=false;if(currentPage==='users')render();})
+       .catch(e=>{window.__vdsUsersLoading=false;document.getElementById('content').innerHTML='<div class="panel">Gagal memuat akun: '+escapeHtml(e.message||'Kesalahan koneksi')+'</div>';});
+   }
+   return;
+ }
+ render();
 }
 function total(){return state.transactions.reduce((s,t)=>s+Number(t.total||0),0)}
 function paid(method){return state.transactions.filter(t=>t.payment===method).reduce((s,t)=>s+Number(t.total||0),0)}
@@ -899,8 +914,11 @@ function resetInvoiceBackground(){if(!requirePermission('invoiceDesign'))return;
 function detailsPage(){return `<div class="cards finance-cards"><div class="card" style="background:#eaf2ff;border-color:#b8d1ff;border-top:4px solid #2563eb"><small style="color:#1d4ed8">TOTAL DANA</small><strong>${money(total())}</strong></div><div class="card" style="background:#eaf8ef;border-color:#b8e3c5;border-top:4px solid #16a34a"><small style="color:#15803d">TOTAL CASH</small><strong>${money(paid('CASH'))}</strong></div><div class="card" style="background:#eaf4ff;border-color:#bfdbfe;border-top:4px solid #0284c7"><small style="color:#0369a1">TOTAL TRANSFER</small><strong>${money(paid('TRANSFER'))}</strong></div><div class="card" style="background:#f3edff;border-color:#d8c8ff;border-top:4px solid #7c3aed"><small style="color:#6d28d9">TOTAL QRIS</small><strong>${money(paid('QRIS'))}</strong></div><div class="card" style="background:#fff5e8;border-color:#fed7aa;border-top:4px solid #ea580c"><small style="color:#c2410c">BELUM DIBAYAR</small><strong>${money(unpaid())}</strong></div></div><div class="panel"><h3>Rekonsiliasi Dana</h3><div class="formgrid" style="margin-top:14px"><div class="field"><label>Uang cash yang ada</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="cashActual" type="text" inputmode="numeric" value="${Number(state.cashActual||0).toLocaleString('id-ID')}" style="padding-left:42px" ${(!isAdmin()&&!hasPermission('cashEdit'))?'disabled title="Tidak diizinkan mengedit nominal cash"':''} oninput="formatCashActual(this)" onchange="saveCashActual(this)"></div></div><div class="field"><label>Selisih cash</label><input readonly value="${money((state.cashActual||0)-paid('CASH'))}"></div><div class="field"><label>Uang masuk rekening (otomatis)</label><input id="bankActual" type="text" readonly value="${money(paid('TRANSFER')+paid('QRIS'))}"><small style="color:#64748b">Otomatis menjumlahkan transaksi LUNAS melalui TRANSFER dan QRIS.</small></div></div></div>`}
 function invoicePage(){const admin=isAdmin();return `<div class="panel printpanel"><div class="panelhead no-print"><h3>Pilih transaksi untuk invoice</h3><select id="invoiceSelect" style="max-width:280px" onchange="selectInvoice(this.value)"><option value="">Pilih nomor nota</option>${state.transactions.map(t=>`<option value="${esc(t.id)}" ${String(selectedInvoice)===String(t.id)?'selected':''}>${esc(t.invoice)} - ${esc(t.bidder||'Tanpa nama')}</option>`).join('')}</select></div>${admin?`<div class="layout-toolbar no-print"><div><strong>Editor posisi:</strong><select id="layoutField" onchange="loadLayoutControls()"><option value="bidder">Nama bidder</option><option value="amount">Nominal</option><option value="item">Nomor barang</option><option value="no">Nomor invoice</option><option value="cashier">Kasir</option></select><label>Kiri <input id="layoutLeft" type="number" step="0.1" oninput="changeInvoiceLayout('left',this.value)"></label><label>Atas <input id="layoutTop" type="number" step="0.1" oninput="changeInvoiceLayout('top',this.value)"></label><label>Font <input id="layoutSize" type="number" step="1" min="6" max="60" oninput="changeInvoiceLayout('size',this.value)"></label><label>Lebar <input id="layoutWidth" type="number" step="0.5" min="1" max="100" oninput="changeInvoiceLayout('width',this.value)"></label><label>Warna <input id="layoutColor" type="color" oninput="changeInvoiceLayout('color',this.value)"></label><button class="soft" onclick="document.getElementById('invoiceBgFile').click()">Ganti Background</button><input id="invoiceBgFile" type="file" accept="image/*" hidden onchange="changeInvoiceBackground(event)"><button class="soft" onclick="resetInvoiceBackground()">Reset BG</button><button class="soft" onclick="resetInvoiceLayout()">Reset</button></div><button class="primary" onclick="saveInvoiceEdits()" ${selectedInvoice?'':'disabled'}>SIMPAN NOTA</button><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`:`<div class="layout-toolbar user-print-toolbar no-print"><button class="accent" onclick="window.print()" ${selectedInvoice?'':'disabled'}>PRINT NOTA</button></div>`}<div class="note no-print">${admin?'Edit isi nota dengan klik/ketik pada tulisan di preview. Atur posisi dan tampilan melalui toolbar.':'User hanya dapat melihat dan mencetak nota. Pengeditan nota hanya tersedia untuk Admin.'}</div><div id="invoicePreview" style="margin-top:12px">${selectedInvoice?`<div class="invoice-paper">${invoiceMarkup(selectedInvoice)}</div>`:'<div class="empty">Pilih transaksi untuk melihat nota.</div>'}</div></div>`}
 const invoiceLayoutDefaults={bidder:{left:23.5,top:38.7,width:72.5,size:19,color:'#e00000'},amount:{left:26,top:50.1,width:34,size:17,color:'#111111'},item:{left:23.8,top:61.4,width:43,size:15,color:'#ff0000'},no:{left:77.6,top:49.7,width:15,size:16,color:'#0875d1'},cashier:{left:44,top:74.1,width:24,size:15,color:'#111111'}};
-let invoiceLayout=JSON.parse(localStorage.getItem('biddingViharaInvoiceLayout')||'null')||JSON.parse(JSON.stringify(invoiceLayoutDefaults));invoiceLayout.bidder=invoiceLayout.bidder||{...invoiceLayoutDefaults.bidder};invoiceLayout.bidder.width=72.5;
-function saveInvoiceLayout(){localStorage.setItem('biddingViharaInvoiceLayout',JSON.stringify(invoiceLayout))}
+const invoiceLayoutKey=()=>currentSite==='dana'?'danaViharaInvoiceLayout':'biddingViharaInvoiceLayout';
+function normalizeInvoiceLayout(value){const x=value&&typeof value==='object'?value:JSON.parse(JSON.stringify(invoiceLayoutDefaults));const out={...JSON.parse(JSON.stringify(invoiceLayoutDefaults)),...x};for(const k of Object.keys(invoiceLayoutDefaults))out[k]={...invoiceLayoutDefaults[k],...(x[k]||{})};return out}
+let invoiceLayout=normalizeInvoiceLayout(JSON.parse(localStorage.getItem('biddingViharaInvoiceLayout')||'null'));
+function loadInvoiceLayoutForSite(site){const key=site==='dana'?'danaViharaInvoiceLayout':'biddingViharaInvoiceLayout';let saved=null;try{saved=JSON.parse(localStorage.getItem(key)||'null')}catch(e){};if(!saved&&site==='bidding'){try{saved=JSON.parse(localStorage.getItem('biddingViharaInvoiceLayout')||'null')}catch(e){}};if(!saved&&state&&state.invoiceLayout)saved=state.invoiceLayout;invoiceLayout=normalizeInvoiceLayout(saved);if(state)state.invoiceLayout=JSON.parse(JSON.stringify(invoiceLayout));}
+function saveInvoiceLayout(){const copy=JSON.parse(JSON.stringify(invoiceLayout));localStorage.setItem(invoiceLayoutKey(),JSON.stringify(copy));if(state){state.invoiceLayout=copy;persist()}}
 function applyInvoiceLayout(){const map={bidder:'invbidder',amount:'invamount',item:'invitem',no:'invno',cashier:'invcashier'};Object.keys(map).forEach(k=>{const els=document.querySelectorAll('.'+map[k]);const v=invoiceLayout[k];if(v)els.forEach(el=>{el.style.left=v.left+'%';el.style.top=v.top+'%';el.style.width=v.width+'%';el.style.fontSize=v.size+'px';el.style.color=v.color})})}
 function selectInvoiceElement(key){const sel=document.getElementById('layoutField');if(sel){sel.value=key;loadLayoutControls();}}
 function loadLayoutControls(){const k=document.getElementById('layoutField')?.value;if(!k)return;const v=invoiceLayout[k];[['layoutLeft','left'],['layoutTop','top'],['layoutSize','size'],['layoutWidth','width'],['layoutColor','color']].forEach(([id,p])=>{const el=document.getElementById(id);if(el)el.value=v[p]})}
