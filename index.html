@@ -1028,7 +1028,8 @@ function invoiceThirdMarkup(id){
  const editable=isAdmin();const ro=editable?'':'readonly tabindex="-1" aria-readonly="true"';
  const vals=(t.invoiceCopies||{})['3']||{};
  const val=(key,fallback)=>Object.prototype.hasOwnProperty.call(vals,key)?vals[key]:fallback;
- const field=(cls,key,fallback)=>`<input class="inv3field ${cls}" ${ro} value="${esc(val(key,fallback))}" ${editable?`oninput="updateInvoiceCopyField('${id}',3,'${key}',this.value)"`:''}>`;
+ const classMap={bidder:'invbidder',amount:'invamount',item:'invitem',no:'invno',cashier:'invcashier'};
+ const field=(cls,key,fallback)=>`<input class="inv3field invfield ${classMap[key]} ${cls}" ${ro} value="${esc(val(key,fallback))}" ${editable?`onfocus="selectInvoiceElement('${key}',3)" oninput="updateInvoiceCopyField('${id}',3,'${key}',this.value)"`:''}>`;
  return `<div class="invoice-copy-third"><div class="invoice-third" data-copy-index="3"><img src="${invoiceThirdBackground}">${field('inv3bidder','bidder',t.bidder)}${field('inv3amount','amount','Rp '+Number(t.total||0).toLocaleString('id-ID'))}${field('inv3item','item','NO. '+t.bidNo+' - '+t.itemName)}${field('inv3no','no',t.invoice)}${field('inv3cashier','cashier',t.cashier||'')}</div></div>`;
 }
 

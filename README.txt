@@ -1,19 +1,10 @@
-VDS INVOICE - NAMA ELEMEN BERBEDA PER RANGKAP
+PERBAIKAN EDITOR NOTA VDS
 
-Toolbar Editor Posisi:
-- Nama bidder 1 / 2 / 3
-- Nominal 1 / 2 / 3
-- Nomor barang 1 / 2 / 3
-- Nomor invoice 1 / 2 / 3
-- Kasir 1 / 2 / 3
+Perbaikan inti:
+- Elemen pada rangkap ketiga sekarang menggunakan kelas editor yang sama dengan rangkap 1 dan 2.
+- Saat elemen rangkap ketiga diklik, dropdown otomatis memilih elemen + rangkap 3.
+- Posisi, ukuran font, lebar, dan warna untuk rangkap ketiga kini ikut diterapkan oleh applyInvoiceLayout.
+- Data teks tiap rangkap tetap disimpan pada invoiceCopies dengan indeks 1, 2, dan 3.
+- Dana Paramita tetap 1 rangkap; Bidding tetap 3 rangkap.
 
-Memilih nama pada dropdown memilih rangkap dan elemen yang akan diedit. Klik elemen pada preview juga otomatis memilih target dan rangkapnya di toolbar. Pengaturan posisi, font, lebar, dan warna diterapkan hanya pada rangkap yang dipilih.
-
-Bidding tetap 3 rangkap. Dana Paramita tetap 1 rangkap.
-
-Pemasangan:
-1. Backup index.html di GitHub.
-2. Ganti dengan index.html dari ZIP ini.
-3. Commit/push lalu tunggu Vercel deploy.
-4. Refresh website dengan Ctrl+F5.
-5. Pilih "Nama bidder 1", atur, lalu pilih "Nama bidder 2" untuk pengaturan terpisah.
+Ganti index.html pada project GitHub, commit/push, tunggu Vercel selesai deploy, lalu refresh dengan Ctrl+F5.
