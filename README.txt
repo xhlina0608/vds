@@ -1,48 +1,20 @@
-VDS — LOW-EGRESS REALTIME TRANSACTION SYNC
+SIAKANG VDS — LOW EGRESS REALTIME + RESTORE ADMIN CLEAR TEST DATA
 
 Isi paket:
-- index.html: frontend VDS dengan pembaruan transaksi otomatis antar-komputer.
-- supabase/functions/vds-api/index.ts: Edge Function untuk merge atomik dan menerbitkan event transaksi.
-- supabase/migrations/002_concurrent_numbering.sql: counter nomor transaksi (jalankan hanya jika belum pernah).
-- supabase/migrations/003_atomic_transaction_merge.sql: merge atomik transaksi/history (sudah dijalankan menurut konfirmasi pengguna).
-- supabase/migrations/004_low_egress_realtime.sql: tabel event kecil, policy akses per website, dan publikasi Realtime.
+- index.html: versi Low-Egress Realtime dengan menu Bersihkan Data Testing dikembalikan.
+- supabase/functions/vds-api/index.ts: Edge Function dari paket Low-Egress Realtime.
+- migrations 002, 003, 004: sama seperti paket Low-Egress Realtime sebelumnya.
 
-URUTAN PEMASANGAN:
-1. Backup data VDS terlebih dahulu.
-2. Di Supabase > SQL Editor, jalankan hanya migration baru:
-   supabase/migrations/004_low_egress_realtime.sql
-   Migration 002 dan 003 tidak perlu dijalankan ulang jika sudah berhasil dijalankan.
-3. Di Supabase > Edge Functions > vds-api, ganti source index.ts dengan file:
-   supabase/functions/vds-api/index.ts
-   lalu Deploy. Jangan hapus atau ubah secrets yang sudah ada.
-4. Ganti index.html pada repository GitHub VDS dengan index.html dari paket ini.
-5. Tunggu Vercel selesai deploy, lalu refresh browser di setiap komputer.
-6. Buka website yang sama (Bidding atau Dana Paramita) di komputer A, B, dan C.
-   Simpan satu transaksi dari A. Transaksi harus muncul otomatis di B dan C tanpa refresh.
-7. Uji juga ketika B sedang membuka formulir transaksi yang belum disimpan; isi formulirnya
-   harus tetap ada saat transaksi dari A masuk.
+Perubahan:
+1. Mengembalikan menu Bersihkan Data Testing khusus Admin.
+2. Fungsi pembersihan mempertahankan master harga/item, akun, hak akses, pengaturan nota, background, dan konfigurasi.
+3. Menghapus transaksi dan history testing serta mengembalikan nilai operasional item ke stok master.
+4. Mempertahankan implementasi nomor transaksi dan event sync_event yang sudah ada di paket Low-Egress Realtime.
 
-CARA KERJA HEMAT EGRESS:
-- Tidak ada polling berkala dan tidak ada reload halaman.
-- Realtime hanya mengirim event INSERT kecil untuk transaksi yang disimpan melalui form transaksi.
-- Payload event berisi satu transaksi dan satu catatan history, bukan seluruh app_state.
-- Komputer hanya berlangganan website yang sedang dibuka (Bidding ATAU Dana Paramita).
-- Event hanya dapat dibaca oleh akun yang memiliki izin ke website tersebut.
-- Saat koneksi Realtime tersambung kembali setelah terputus, aplikasi melakukan satu kali catch-up
-  get-state untuk menyelaraskan transaksi/history yang mungkin terlewat. Ini bukan polling.
-- Event lama dibersihkan otomatis saat event baru masuk; tabel menyimpan maksimal sekitar 7 hari
-  event terakhir. Pembersihan berjalan ketika ada event baru.
-
-CATATAN DAN BATASAN:
-- Penyimpanan utama tetap menggunakan app_state JSON dan merge atomik migration 003.
-  Paket ini tidak mengubah model database transaksi menjadi tabel per transaksi.
-- Ketika menyimpan transaksi, browser tetap mengirim snapshot state ke Edge Function seperti
-  mekanisme sekarang. Penghematan egress terutama pada pembaruan ke komputer lain: tidak perlu
-  mengunduh seluruh app_state untuk setiap transaksi baru.
-- Perubahan master data/pengaturan yang dilakukan di luar form transaksi tidak memicu event
-  realtime dalam paket ini. Pembaruan live yang dibuat khusus adalah untuk transaksi/history.
-- Jika CDN Supabase Realtime tidak dapat dimuat atau koneksi live gagal, penyimpanan cloud tetap
-  berjalan; status akan memberi tahu bahwa live sync tidak tersedia.
-- Tidak ada polling otomatis. Catch-up hanya dilakukan ketika koneksi Realtime pulih.
-- Untuk volume transaksi yang sangat besar, arsitektur ideal jangka panjang adalah menyimpan
-  transaksi dan history sebagai baris database tersendiri.
+PENTING:
+- Migration 004 harus sudah dijalankan satu kali di Supabase. Jangan jalankan ulang 002/003/004 jika sudah pernah berhasil.
+- Deploy Edge Function dari folder supabase/functions/vds-api jika belum menggunakan versi yang sama.
+- Upload index.html ke GitHub/Vercel.
+- Login sebagai Admin untuk melihat menu Bersihkan Data Testing.
+- Fitur sinkronisasi Realtime memerlukan pengujian langsung di Supabase dengan dua komputer. Paket ini belum dapat divalidasi terhadap proyek cloud pengguna dari sini.
+- Backup data sebelum menggunakan fitur hapus data testing.

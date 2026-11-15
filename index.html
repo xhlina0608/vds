@@ -104,6 +104,7 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
 <button data-page="prices" onclick="go('prices')"><span>◇</span>Daftar Harga &amp; Item</button>
 <button data-page="details" onclick="go('details')"><span>∑</span>Rincian Dana</button>
+<button data-page="cleanup" onclick="go('cleanup')" class="admin-only"><span>⌫</span>Bersihkan Data Testing</button>
 </nav><div class="userbox">LOGIN SEBAGAI <b id="who">Pengguna</b><button class="soft" style="margin-top:10px;width:100%" onclick="logout()">Keluar</button></div></aside>
 <main><header class="top"><div><div class="eyebrow">Sistem administrasi bidding</div><h1 id="pageTitle">Dashboard</h1></div><div class="actions no-print"><button class="soft" id="portalSwitchBtn" onclick="backToPortal()">Pilih Website</button><button class="soft" onclick="refreshCloud()">Muat Ulang Cloud</button><button class="soft admin-only" onclick="exportExcel()">Export Excel</button><button class="soft admin-only" onclick="exportPDF()">Export PDF</button><button class="soft admin-only" id="backupBtn" onclick="exportBackup()">Backup Google Drive</button><button class="soft admin-only" id="restoreBtn" onclick="document.getElementById('restoreFile').click()">Restore Backup</button><input id="restoreFile" type="file" accept=".json,application/json" hidden onchange="restoreBackup(event)"></div></header>
 <section id="content"></section></main></div>
@@ -377,8 +378,73 @@ if(currentPage==='transactions')c.innerHTML=transactionsPage();
 if(currentPage==='history')c.innerHTML=historyPage();
 if(currentPage==='invoice')c.innerHTML=invoicePage();
 if(currentPage==='details')c.innerHTML=detailsPage();
-if(currentPage==='users')c.innerHTML=usersPage();
+if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();
 if(currentPage==='sponsors')c.innerHTML=tablePage('DATABASE SPONSOR BARANG',['No','Nama Sponsor','Barang Sponsor'],state.sponsors,'sponsors',['no','name','goods'],'sponsor');if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls()}}
+function cleanupPage(){
+ if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
+ return `<div class="panel">
+  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
+  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
+  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
+   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
+   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
+   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
+   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
+   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+   <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
+   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
+  </div>
+ </div>`;
+}
+function resetOperationalArrays(target){
+ target.transactions=[];
+ target.history=[];
+ if(Array.isArray(target.items)){
+  const priceByNo=new Map((target.prices||[]).map(p=>[String(p.no),p]));
+  target.items=target.items.map(item=>{
+   const master=priceByNo.get(String(item.no));
+   const stock=Number(master?.stock??item.stock??0);
+   return {...item,bid:0,remain:stock,sum:0,return:null};
+  });
+ }
+}
+async function clearTestingData(){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data testing.');return;}
+ const ok=confirm('PERINGATAN: Semua Live Bidding, History Bidding, dan Live Laporan Dana pada KEDUA website akan dihapus. Daftar harga, item, akun, pengaturan nota, dan konfigurasi tetap disimpan. Lanjutkan?');
+ if(!ok)return;
+ const phrase=prompt('Untuk konfirmasi, ketik: HAPUS DATA TESTING');
+ if(phrase!=='HAPUS DATA TESTING'){alert('Dibatalkan. Teks konfirmasi tidak sesuai.');return;}
+ const btn=document.querySelector('#content button.danger');
+ if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
+ try{
+  for(const site of ['bidding','dana']){
+   const out=await vdsApi('get-state',{site});
+   let target=out.state&&typeof out.state==='object'?out.state:null;
+   if(!target){
+    const key=site==='dana'?'danaViharaState':'biddingViharaState';
+    try{target=JSON.parse(localStorage.getItem(key)||'null');}catch(e){target=null;}
+   }
+   if(!target)throw new Error('Data cloud '+site+' tidak ditemukan. Tidak ada data yang diubah pada website ini.');
+   resetOperationalArrays(target);
+   await vdsApi('save-state',{site,state:target});
+   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(target));}catch(e){}
+   if(currentSite===site)state=target;
+  }
+  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=true;vdsCloudLoaded.dana=true;}
+  render();
+  alert('Berhasil. Data Live Bidding, History Bidding, dan Live Laporan Dana pada kedua website sudah dikosongkan. Master data dan pengaturan tetap tersimpan.');
+ }catch(e){
+  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
+  console.error(e);
+ }finally{
+  const b=document.querySelector('#content button.danger');
+  if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
+ }
+}
+
+
 function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
