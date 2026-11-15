@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Yayasan Vihara Dharma Shanti - Bidding & Dana Paramita</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -113,6 +114,42 @@ const VDS_API_URL='https://gmpedvbzmgrpwsgsyszj.supabase.co/functions/v1/vds-api
 const VDS_PUBLISHABLE_KEY='sb_publishable_KGUwbiUBXU69OPMWn2Irgw_RnEc9Lqp';
 let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getItem('vds_access_token')||'';
 let vdsSaveTimer=null, vdsSaving=false, vdsSaveAgain=false, vdsCloudLoaded={bidding:false,dana:false};
+// Low-egress live sync: receive only compact transaction events, not full app_state snapshots.
+let vdsRealtimeClient=null, vdsRealtimeChannel=null, vdsRealtimeSite='', vdsRealtimeGeneration=0;
+function vdsStopRealtime(){vdsRealtimeGeneration++;if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}vdsRealtimeChannel=null;vdsRealtimeSite='';}
+function vdsMergeRealtimeEvent(row){
+ const payload=row&&row.event_payload;if(!payload||!state||row.site!==currentSite)return;
+ const tx=payload.transaction, hist=payload.history; if(!tx||!tx.id)return;
+ state.transactions=Array.isArray(state.transactions)?state.transactions:[];
+ const i=state.transactions.findIndex(x=>String(x.id)===String(tx.id));
+ if(i<0)state.transactions.push(tx);else if(String(state.transactions[i].updatedAt||'')<=String(tx.updatedAt||''))state.transactions[i]=tx;
+ if(hist&&hist.id){state.history=Array.isArray(state.history)?state.history:[];if(!state.history.some(x=>String(x.id)===String(hist.id)))state.history.push(hist);}
+ try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}
+ render();
+}
+async function vdsStartRealtime(site){
+ if(!vdsAccessToken||!site||!window.supabase?.createClient)return;
+ if(vdsRealtimeSite===site&&vdsRealtimeChannel)return;
+ vdsStopRealtime();const generation=vdsRealtimeGeneration;vdsRealtimeSite=site;
+ try{
+  if(!vdsRealtimeClient)vdsRealtimeClient=window.supabase.createClient('https://gmpedvbzmgrpwsgsyszj.supabase.co',VDS_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},realtime:{params:{eventsPerSecond:2}}});
+  vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
+  let firstSubscribed=true;
+  vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status)=>{
+   if(generation!==vdsRealtimeGeneration)return;
+   if(status==='SUBSCRIBED'){if(firstSubscribed){firstSubscribed=false;vdsSyncNote('Sinkronisasi live aktif',1800);}else{vdsCatchupTransactions(site).catch(e=>console.warn('Live sync catch-up:',e));}}
+   else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT')vdsSyncNote('Live sync terputus — mencoba menyambung',2600);
+  });
+ }catch(e){console.warn('Realtime tidak tersedia:',e);vdsSyncNote('Live sync tidak tersedia; data tetap tersimpan di cloud',3500);}
+}
+async function vdsCatchupTransactions(site){
+ if(site!==currentSite||!vdsAccessToken)return;
+ const out=await vdsApi('get-state',{site});if(!out.state)return;
+ const incoming=out.state;const byId=new Map((state.transactions||[]).map(x=>[String(x.id),x]));
+ for(const tx of (incoming.transactions||[])){const old=byId.get(String(tx.id));if(!old||String(old.updatedAt||'')<String(tx.updatedAt||''))byId.set(String(tx.id),tx);}
+ state.transactions=[...byId.values()];const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
+ try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}render();
+}
 async function vdsApi(action, data={}, token=vdsAccessToken){
  const headers={'Content-Type':'application/json','apikey':VDS_PUBLISHABLE_KEY};
  if(token)headers.Authorization='Bearer '+token;
@@ -308,11 +345,12 @@ async function openSite(site, inNewTab=false){
  document.querySelector('.brand small').textContent=site==='dana'?'Yayasan Vihara Dharma Shanti Kundur':'Yayasan Vihara Dharma Shanti Tanjung Batu';
  document.querySelector('.eyebrow').textContent=site==='dana'?'Sistem administrasi Dana Paramita':'Sistem administrasi bidding';
  document.getElementById('pageTitle').textContent=title;
+ await vdsStartRealtime(site);
  const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
  setRoleUI();go('dashboard');
 }
-function backToPortal(){if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
-function logout(){currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
+function backToPortal(){vdsStopRealtime();if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
+function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
@@ -1106,11 +1144,12 @@ async function saveTransaction(id){
   if(id){const i=state.transactions.findIndex(t=>t.id===id);if(i<0)throw new Error('Transaksi yang diedit tidak ditemukan.');state.transactions[i]=obj}
   else state.transactions.push(obj);
   state.history=state.history||[];
-  state.history.push({id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,payment:obj.payment,staff:obj.staff});
+  const syncHistory={id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,payment:obj.payment,staff:obj.staff};
+  state.history.push(syncHistory);
   // Persist immediately rather than waiting for the debounce timer.
   try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}
   clearTimeout(vdsSaveTimer);
-  await vdsApi('save-state',{site:currentSite,state});
+  await vdsApi('save-state',{site:currentSite,state,sync_event:{transaction:obj,history:syncHistory}});
   vdsSyncNote('Transaksi tersimpan di cloud');
   closeModal();render();
  }catch(e){

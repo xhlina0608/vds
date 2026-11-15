@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
 
     if (action === "get-state" || action === "save-state") {
       const site = String(body.site || "");
-      await requireSiteAccess(req, site);
+      const actor = await requireSiteAccess(req, site);
       if (action === "get-state") {
         const { data, error } = await adminDb.from("app_state").select("payload,updated_at").eq("site", site).maybeSingle();
         if (error) throw error;
@@ -189,16 +189,30 @@ Deno.serve(async (req) => {
       }
       const payload = body.state;
       if (!payload || typeof payload !== "object") return reply({ error: "Data state tidak valid." }, 400);
-      const { data: actor } = await adminDb.auth.getUser((req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, ""));
       // Atomic server-side merge: concurrent users may submit stale snapshots.
       // The SQL RPC unions transactions/history by id under the row lock, so a
       // transaction inserted by another user is never removed by a stale save.
       const { error } = await adminDb.rpc("merge_vds_app_state", {
         p_site: site,
         p_payload: payload,
-        p_updated_by: actor.user?.id ?? null,
+        p_updated_by: actor.user.id,
       });
       if (error) throw error;
+
+      // Publish only the transaction changed by the dedicated transaction form.
+      // Other settings/state saves do not generate Realtime traffic.
+      const syncEvent = body.sync_event;
+      if (syncEvent && typeof syncEvent === "object" && syncEvent.transaction && syncEvent.history) {
+        const tx = syncEvent.transaction;
+        const hist = syncEvent.history;
+        if (tx.id && hist.id) {
+          const { error: eventError } = await adminDb.from("vds_sync_events").insert({
+            site,
+            event_payload: { transaction: tx, history: hist },
+          });
+          if (eventError) throw eventError;
+        }
+      }
       return reply({ ok: true });
     }
 
