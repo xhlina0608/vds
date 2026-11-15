@@ -103,7 +103,6 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
 <button data-page="prices" onclick="go('prices')"><span>◇</span>Daftar Harga &amp; Item</button>
 <button data-page="details" onclick="go('details')"><span>∑</span>Rincian Dana</button>
-<button data-page="cleanup" onclick="go('cleanup')" class="admin-only"><span>⌫</span>Bersihkan Data Testing</button>
 </nav><div class="userbox">LOGIN SEBAGAI <b id="who">Pengguna</b><button class="soft" style="margin-top:10px;width:100%" onclick="logout()">Keluar</button></div></aside>
 <main><header class="top"><div><div class="eyebrow">Sistem administrasi bidding</div><h1 id="pageTitle">Dashboard</h1></div><div class="actions no-print"><button class="soft" id="portalSwitchBtn" onclick="backToPortal()">Pilih Website</button><button class="soft" onclick="refreshCloud()">Muat Ulang Cloud</button><button class="soft admin-only" onclick="exportExcel()">Export Excel</button><button class="soft admin-only" onclick="exportPDF()">Export PDF</button><button class="soft admin-only" id="backupBtn" onclick="exportBackup()">Backup Google Drive</button><button class="soft admin-only" id="restoreBtn" onclick="document.getElementById('restoreFile').click()">Restore Backup</button><input id="restoreFile" type="file" accept=".json,application/json" hidden onchange="restoreBackup(event)"></div></header>
 <section id="content"></section></main></div>
@@ -184,7 +183,7 @@ function setRoleUI(){
  if(isAdmin()&&!accountBtn){accountBtn=document.createElement('button');accountBtn.id='accountNav';accountBtn.dataset.page='users';accountBtn.innerHTML='<span>♙</span>Manajemen Akun';accountBtn.onclick=()=>go('users');nav.appendChild(accountBtn);}
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
- const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details',cleanup:'cleanup'};
+ const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details'};
  document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];el.style.display=(isAdmin()||hasPermission(k))?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
@@ -315,10 +314,10 @@ async function openSite(site, inNewTab=false){
 function backToPortal(){if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
 function logout(){currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
- if((p==='users'||p==='cleanup')&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
+ if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
- const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
+ const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun'};
  document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
  if(p==='users'&&!window.__vdsUsersLoaded){
    document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
@@ -341,73 +340,7 @@ if(currentPage==='history')c.innerHTML=historyPage();
 if(currentPage==='invoice')c.innerHTML=invoicePage();
 if(currentPage==='details')c.innerHTML=detailsPage();
 if(currentPage==='users')c.innerHTML=usersPage();
-if(currentPage==='cleanup')c.innerHTML=cleanupPage();
 if(currentPage==='sponsors')c.innerHTML=tablePage('DATABASE SPONSOR BARANG',['No','Nama Sponsor','Barang Sponsor'],state.sponsors,'sponsors',['no','name','goods'],'sponsor');if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls()}}
-
-function cleanupPage(){
- if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
- return `<div class="panel">
-  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
-  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
-  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
-   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
-   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
-   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
-   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
-   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
-  </tbody></table></div>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
-   <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
-   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
-  </div>
- </div>`;
-}
-function resetOperationalArrays(target){
- target.transactions=[];
- target.history=[];
- if(Array.isArray(target.items)){
-  const priceByNo=new Map((target.prices||[]).map(p=>[String(p.no),p]));
-  target.items=target.items.map(item=>{
-   const master=priceByNo.get(String(item.no));
-   const stock=Number(master?.stock??item.stock??0);
-   return {...item,bid:0,remain:stock,sum:0,return:null};
-  });
- }
-}
-async function clearTestingData(){
- if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data testing.');return;}
- const ok=confirm('PERINGATAN: Semua Live Bidding, History Bidding, dan Live Laporan Dana pada KEDUA website akan dihapus. Daftar harga, item, akun, pengaturan nota, dan konfigurasi tetap disimpan. Lanjutkan?');
- if(!ok)return;
- const phrase=prompt('Untuk konfirmasi, ketik: HAPUS DATA TESTING');
- if(phrase!=='HAPUS DATA TESTING'){alert('Dibatalkan. Teks konfirmasi tidak sesuai.');return;}
- const btn=document.querySelector('#content button.danger');
- if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
- try{
-  for(const site of ['bidding','dana']){
-   const out=await vdsApi('get-state',{site});
-   let target=out.state&&typeof out.state==='object'?out.state:null;
-   if(!target){
-    const key=site==='dana'?'danaViharaState':'biddingViharaState';
-    try{target=JSON.parse(localStorage.getItem(key)||'null');}catch(e){target=null;}
-   }
-   if(!target)throw new Error('Data cloud '+site+' tidak ditemukan. Tidak ada data yang diubah pada website ini.');
-   resetOperationalArrays(target);
-   await vdsApi('save-state',{site,state:target});
-   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(target));}catch(e){}
-   if(currentSite===site)state=target;
-  }
-  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=true;vdsCloudLoaded.dana=true;}
-  render();
-  alert('Berhasil. Data Live Bidding, History Bidding, dan Live Laporan Dana pada kedua website sudah dikosongkan. Master data dan pengaturan tetap tersimpan.');
- }catch(e){
-  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
-  console.error(e);
- }finally{
-  const b=document.querySelector('#content button.danger');
-  if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
- }
-}
-
 function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
@@ -1149,11 +1082,42 @@ function updateInvoiceCopyField(id,copyIndex,field,value){
  persist();
 }
 function updateInvoiceInline(id,field,value){if(!isAdmin()){alert('User hanya dapat mencetak nota.');return}const t=state.transactions.find(x=>x.id===id);if(!t)return;const v=String(value??'').trim();if(field==='amount'){const n=Number(v.replace(/[^0-9,-]/g,'').replace(/\./g,'').replace(',','.'));if(Number.isFinite(n))t.total=n;}else if(field==='item'){const cleaned=v.replace(/^NO\.\s*/i,'');const parts=cleaned.split(/\s+-\s+/,2);if(parts.length===2){t.bidNo=parts[0].trim();t.itemName=parts[1].trim()}else t.itemName=cleaned;}else if(field==='no')t.invoice=v;else if(field==='date')t.date=v;else t[field]=v;persist();}
-function transactionForm(id){const t=id?state.transactions.find(x=>x.id===id):null;const opts=state.prices.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');document.getElementById('modalTitle').textContent=t?'Edit Transaksi':'Tambah Transaksi';document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field"><label>${currentSite==='dana'?'ORDER NO':'BID NO'} (OTOMATIS)</label><input id="fBid" value="${esc(t?.bidNo||nextBidNo())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor dibuat otomatis berurutan: 01, 02, 03, dan seterusnya.</small></div><div class="field"><label>Nomor Nota</label><input id="fInvoice" value="${esc(t?.invoice||nextInvoice())}"></div><div class="field full"><label>Nama Barang</label><select id="fItem"><option value="">Pilih barang</option>${opts}</select></div><div class="field full"><label>${currentSite==='dana'?'Nama Donatur':'Nama Bidder'}</label><input id="fBidder" value="${esc(t?.bidder||'')}"></div><div class="field"><label>${currentSite==='dana'?'Nominal Dana':'Harga Bidding'}</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPrice" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.price||0).toLocaleString('id-ID')}" oninput="formatPriceInput(this)" style="padding-left:42px"></div></div><div class="field"><label>Jumlah</label><input id="fQty" type="number" min="1" value="${t?.qty||1}"></div><div class="field"><label>Pembayaran</label><select id="fPayment"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select></div><div class="field"><label>Tanggal</label><input id="fDate" value="${esc(t?.date||new Date().toISOString().slice(0,10))}"></div></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveTransaction('${id||''}')">Simpan</button></div>`;if(t){document.getElementById('fItem').value=t.itemName;document.getElementById('fPayment').value=t.payment||''}document.getElementById('modal').classList.add('show')}
+function transactionForm(id){const t=id?state.transactions.find(x=>x.id===id):null;const opts=state.prices.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');document.getElementById('modalTitle').textContent=t?'Edit Transaksi':'Tambah Transaksi';document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field"><label>${currentSite==='dana'?'ORDER NO':'BID NO'} (OTOMATIS)</label><input id="fBid" value="${esc(t?.bidNo||nextBidNo())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor resmi dikunci oleh cloud saat Simpan agar tidak bentrok dengan pengguna lain.</small></div><div class="field"><label>Nomor Nota</label><input id="fInvoice" value="${esc(t?.invoice||nextInvoice())}"></div><div class="field full"><label>Nama Barang</label><select id="fItem"><option value="">Pilih barang</option>${opts}</select></div><div class="field full"><label>${currentSite==='dana'?'Nama Donatur':'Nama Bidder'}</label><input id="fBidder" value="${esc(t?.bidder||'')}"></div><div class="field"><label>${currentSite==='dana'?'Nominal Dana':'Harga Bidding'}</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPrice" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.price||0).toLocaleString('id-ID')}" oninput="formatPriceInput(this)" style="padding-left:42px"></div></div><div class="field"><label>Jumlah</label><input id="fQty" type="number" min="1" value="${t?.qty||1}"></div><div class="field"><label>Pembayaran</label><select id="fPayment"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select></div><div class="field"><label>Tanggal</label><input id="fDate" value="${esc(t?.date||new Date().toISOString().slice(0,10))}"></div></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveTransaction('${id||''}')">Simpan</button></div>`;if(t){document.getElementById('fItem').value=t.itemName;document.getElementById('fPayment').value=t.payment||''}document.getElementById('modal').classList.add('show')}
 function nextInvoice(){const base=currentSite==='dana'?26000:2600;const nums=state.transactions.map(t=>Number(String(t.invoice||'').replace(/[^0-9]/g,''))).filter(n=>Number.isFinite(n)&&n>=base);return String(Math.max(base,...nums)+1)}
 function nextBidNo(){const nums=state.transactions.map(t=>parseInt(String(t.bidNo||'').replace(/\D/g,''),10)).filter(Number.isFinite);return String((nums.length?Math.max(...nums):0)+1).padStart(2,'0')}
 function formatPriceInput(el){const digits=String(el.value||'').replace(/\D/g,'');el.value=digits?Number(digits).toLocaleString('id-ID'):''}
-function saveTransaction(id){const item=document.getElementById('fItem').value;const price=Number(String(document.getElementById('fPrice').value||'').replace(/\D/g,''))||0;const qty=+document.getElementById('fQty').value;if(!item||!document.getElementById('fBidder').value.trim()||qty<1){alert('Lengkapi barang, nama bidder, dan jumlah.');return}const previous=id?state.transactions.find(x=>x.id===id):null;const obj={id:id||crypto.randomUUID(),invoice:document.getElementById('fInvoice').value,bidNo:document.getElementById('fBid').value,itemName:item,bidder:document.getElementById('fBidder').value,price,qty,total:price*qty,payment:document.getElementById('fPayment').value,date:document.getElementById('fDate').value,staff:currentUser,cashier:'',createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};if(id){const i=state.transactions.findIndex(t=>t.id===id);state.transactions[i]=obj}else state.transactions.push(obj);state.history.push({id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,payment:obj.payment,staff:obj.staff});persist();closeModal();render()}
+async function saveTransaction(id){
+ const item=document.getElementById('fItem').value;
+ const price=Number(String(document.getElementById('fPrice').value||'').replace(/\D/g,''))||0;
+ const qty=+document.getElementById('fQty').value;
+ const bidder=document.getElementById('fBidder').value.trim();
+ if(!item||!bidder||qty<1){alert('Lengkapi barang, nama bidder, dan jumlah.');return}
+ const previous=id?state.transactions.find(x=>x.id===id):null;
+ const saveBtn=document.querySelector('#modalBody button.primary');
+ if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Memproses nomor…';}
+ try{
+  let official={bidNo:previous?.bidNo,invoice:previous?.invoice};
+  // Allocate numbers only for a new transaction. Edits retain their original numbers.
+  if(!id){
+   const allocated=await vdsApi('allocate-transaction-numbers',{site:currentSite});
+   official={bidNo:allocated.bidNo,invoice:allocated.invoice};
+  }
+  const obj={id:id||crypto.randomUUID(),invoice:id?(document.getElementById('fInvoice').value||previous.invoice):official.invoice,bidNo:id?(document.getElementById('fBid').value||previous.bidNo):official.bidNo,itemName:item,bidder,price,qty,total:price*qty,payment:document.getElementById('fPayment').value,date:document.getElementById('fDate').value,staff:currentUser,cashier:'',createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+  if(id){const i=state.transactions.findIndex(t=>t.id===id);if(i<0)throw new Error('Transaksi yang diedit tidak ditemukan.');state.transactions[i]=obj}
+  else state.transactions.push(obj);
+  state.history=state.history||[];
+  state.history.push({id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,payment:obj.payment,staff:obj.staff});
+  // Persist immediately rather than waiting for the debounce timer.
+  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}
+  clearTimeout(vdsSaveTimer);
+  await vdsApi('save-state',{site:currentSite,state});
+  vdsSyncNote('Transaksi tersimpan di cloud');
+  closeModal();render();
+ }catch(e){
+  alert('Transaksi belum tersimpan: '+(e.message||e)+'. Silakan coba Simpan kembali. Jika nomor sudah dialokasikan, sistem akan menggunakan nomor baru pada percobaan berikutnya.');
+  if(saveBtn){saveBtn.disabled=false;saveBtn.textContent='Simpan';}
+ }
+}
 function editTransaction(id){transactionForm(id)}
 function addRow(type){if(type==='catalog'){if(!(isAdmin()||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}document.getElementById('modalTitle').textContent='Tambah Barang';document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field full"><label>Nama Barang</label><input id="r_name" placeholder="Nama barang"></div><div class="field"><label>Stok</label><input id="r_stock" type="number" min="0" value="1"></div><div class="field"><label>Harga</label><input id="r_price" type="number" min="0" value="0"></div></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveRow('catalog')">Simpan</button></div>`;document.getElementById('modal').classList.add('show');return;}if(!requirePermission(type==='price'?'prices':'items'))return;let title=type==='price'?'Tambah Daftar Harga':type==='item'?'Tambah Item':'Tambah Sponsor';document.getElementById('modalTitle').textContent=title;const fields=type==='price'?[['name','Nama Barang'],['stock','Stok'],['price','Harga']]:type==='item'?[['name','Nama Barang'],['stock','Stok']]:[['name','Nama Sponsor'],['goods','Barang Sponsor']];document.getElementById('modalBody').innerHTML=`<div class="formgrid">${fields.map(([k,l])=>`<div class="field"><label>${l}</label><input id="r_${k}"></div>`).join('')}</div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="primary" onclick="saveRow('${type}')">Simpan</button></div>`;document.getElementById('modal').classList.add('show')}
 function saveCatalogEdit(i){const old=state.prices[i];if(!old)return;const name=document.getElementById('e_name').value.trim();if(!name){alert('Nama barang wajib diisi.');return;}if(state.prices.some((x,j)=>j!==i&&String(x.name).toLowerCase()===name.toLowerCase())){alert('Nama barang sudah digunakan.');return;}const oldName=old.name;const stock=Number(document.getElementById('e_stock').value||0),price=Number(document.getElementById('e_price').value||0);state.prices[i]={...old,name,stock,price};const match=state.items.find(x=>String(x.name).toLowerCase()===String(oldName).toLowerCase());if(match){match.name=name;match.stock=stock;match.remain=stock-Number(match.bid||0);}else state.items.push({no:i+1,name,stock,bid:0,remain:stock,sum:0,return:null});state.transactions.forEach(t=>{if(String(t.itemName).toLowerCase()===String(oldName).toLowerCase())t.itemName=name;});persist();closeModal();render();}

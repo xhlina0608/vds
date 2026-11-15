@@ -1,16 +1,39 @@
-VDS - Fitur Bersihkan Data Testing
+VDS — Nomor Transaksi Aman untuk Input Bersamaan
 
-- Menu Bersihkan Data Testing hanya terlihat dan dapat dibuka oleh Admin.
-- Mengosongkan transaksi dan history pada Bidding serta Dana Paramita.
-- Mereset bid, total, sisa, dan return item operasional ke kondisi awal berdasarkan master stok.
-- Mempertahankan daftar harga/master item, stok master, akun, hak akses, pengaturan nota/background, dan konfigurasi.
-- Meminta dua konfirmasi sebelum menghapus.
-- Mengambil state terbaru dari cloud dan menyimpan kembali untuk kedua website.
+Isi paket:
+- index.html: frontend VDS yang meminta nomor resmi ke cloud saat transaksi baru disimpan.
+- supabase/functions/vds-api/index.ts: Edge Function vds-api dengan action allocate-transaction-numbers.
+- supabase/migrations/002_concurrent_numbering.sql: tabel counter dan fungsi SQL atomik.
 
-Update:
-1. Ekstrak ZIP.
-2. Ganti index.html di repository GitHub VDS dengan index.html dari ZIP.
-3. Tunggu Vercel selesai deploy.
-4. Login Admin dan buka menu Bersihkan Data Testing.
+URUTAN PEMASANGAN (WAJIB):
+1. Backup data VDS terlebih dahulu.
+2. Buka Supabase > SQL Editor, jalankan seluruh isi file berikut secara berurutan:
+   - supabase/migrations/002_concurrent_numbering.sql (jika belum pernah dijalankan)
+   - supabase/migrations/003_atomic_transaction_merge.sql
+3. Buka Supabase > Edge Functions > vds-api.
+   Ganti source index.ts dengan file pada paket ini, lalu Deploy.
+   Pastikan secrets lama tetap tersedia; jangan hapus/ubah SUPABASE_SERVICE_ROLE_KEY,
+   SUPABASE_ANON_KEY, atau VDS_BOOTSTRAP_SECRET.
+4. Ganti index.html pada repository GitHub VDS dengan index.html dari paket ini.
+5. Tunggu Vercel selesai deploy. Refresh browser (Ctrl+F5).
+6. Uji satu transaksi di Bidding dan satu di Dana Paramita. Coba juga dua perangkat
+   menyimpan transaksi hampir bersamaan; nomor resmi harus berbeda.
 
-Catatan: tindakan ini menghapus data transaksi dan riwayat testing secara permanen dari state aplikasi. Buat backup terlebih dahulu jika data testing masih ingin disimpan.
+Perilaku:
+- Penyimpanan transaksi dan history memakai merge atomik di database berdasarkan ID.
+- Jika dua pengguna menyimpan snapshot lama hampir bersamaan, transaksi dari keduanya tetap digabung; transaksi pengguna lain tidak dihapus/ditimpa.
+- Jika dua pengguna mengedit transaksi ID yang sama, perubahan terakhir yang diterima server akan digunakan.
+- Data master lain (daftar barang/harga, pengaturan, layout nota) tetap mengikuti mekanisme simpan sebelumnya; fitur merge ini secara khusus melindungi array transaksi dan history.
+- Nomor BID/ORDER dan nomor nota terpisah untuk Bidding dan Dana Paramita.
+- Nomor resmi dialokasikan di server pada saat Simpan.
+- Edit transaksi mempertahankan nomor lama.
+- Bila gagal setelah nomor dialokasikan, bisa ada nomor yang terlewati. Ini disengaja
+  demi menghindari nomor ganda.
+- Nomor invoice awal mengikuti pola lama: Bidding mulai 2601, Dana Paramita mulai 26001.
+- Nomor urut BID/ORDER mengikuti nomor tertinggi yang sudah ada pada masing-masing website.
+
+CATATAN:
+Transaksi masih berada di array JSON app_state, tetapi penggabungan array transaksi dan
+history kini dilakukan secara atomik di Supabase. Ini mencegah transaksi baru dari user
+lain hilang akibat browser yang mengirim snapshot lama. Untuk skala transaksi sangat besar,
+arsitektur ideal berikutnya tetap tabel database per transaksi.
