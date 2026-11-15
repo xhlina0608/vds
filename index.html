@@ -251,7 +251,7 @@ function setRoleUI(){
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
  const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details'};
- document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];el.style.display=(isAdmin()||hasPermission(k))?'':'none';});
+ document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];const allowed=el.dataset.page==='cleanup'?isAdmin():(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
  document.getElementById('who').textContent=currentUser+' · '+(isAdmin()?'ADMIN':'USER');
