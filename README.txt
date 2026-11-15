@@ -18,3 +18,8 @@ PENTING:
 - Login sebagai Admin untuk melihat menu Bersihkan Data Testing.
 - Fitur sinkronisasi Realtime memerlukan pengujian langsung di Supabase dengan dua komputer. Paket ini belum dapat divalidasi terhadap proyek cloud pengguna dari sini.
 - Backup data sebelum menggunakan fitur hapus data testing.
+
+Pembaruan sinkronisasi & urutan nota:
+- Realtime tetap dipakai untuk pembaruan seketika. Jika event WebSocket tidak sampai, browser mengambil event transaksi kecil setiap 5 detik (bukan mengunduh seluruh app_state).
+- Daftar Live Bidding/Laporan Dana dan pilihan cetak nota diurutkan menurut nomor urut BID/ORDER 01, 02, 03, dan seterusnya. Nomor nota resmi (mis. 2601/26001) tetap dipertahankan dan ditampilkan bersama nomor urut.
+- Edge Function vds-api harus di-deploy ulang agar action get-sync-events tersedia. Migration 004 tetap harus sudah berhasil dijalankan.

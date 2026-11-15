@@ -179,6 +179,17 @@ Deno.serve(async (req) => {
       return reply({ ok: true, bidNo: String(row.bid_no).padStart(2, "0"), invoice: String(row.invoice_no) });
     }
 
+    if (action === "get-sync-events") {
+      const site = String(body.site || "");
+      await requireSiteAccess(req, site);
+      const afterId = Math.max(0, Number(body.after_id || 0));
+      const { data, error } = await adminDb.from("vds_sync_events")
+        .select("id,site,event_payload,created_at")
+        .eq("site", site).gt("id", afterId).order("id", { ascending: true }).limit(100);
+      if (error) throw error;
+      return reply({ ok: true, events: data || [] });
+    }
+
     if (action === "get-state" || action === "save-state") {
       const site = String(body.site || "");
       const actor = await requireSiteAccess(req, site);
