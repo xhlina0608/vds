@@ -677,9 +677,10 @@ async function exportPDFBidding(){
  const rows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
  const money=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
  const sum=arr=>arr.reduce((n,t)=>n+Number(t.total||0),0);
- const cash=sum(rows.filter(t=>String(t.payment||'').toUpperCase()==='CASH'));
- const transfer=sum(rows.filter(t=>String(t.payment||'').toUpperCase()==='TRANSFER'));
- const qris=sum(rows.filter(t=>String(t.payment||'').toUpperCase()==='QRIS'));
+ const sumPaid=arr=>arr.reduce((n,t)=>n+Number(t.total||0)+Number(t.overpay||0),0);
+ const cash=sumPaid(rows.filter(t=>String(t.payment||'').toUpperCase()==='CASH'));
+ const transfer=sumPaid(rows.filter(t=>String(t.payment||'').toUpperCase()==='TRANSFER'));
+ const qris=sumPaid(rows.filter(t=>String(t.payment||'').toUpperCase()==='QRIS'));
  const unpaidTotal=sum(rows.filter(t=>!t.payment||/BELUM/i.test(String(t.payment))));
  const grand=sum(rows);
  const escHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -695,14 +696,14 @@ async function exportPDFBidding(){
  const metrics=[['TOTAL DANA',grand,danaTheme?'#16836b':'#2860d8',danaTheme?'#eaf6f1':'#eff4ff'],['TOTAL CASH',cash,'#15965d','#eefbf3'],['TOTAL TRANSFER',transfer,'#1688bd','#eef7fc'],['TOTAL QRIS',qris,'#8050cf','#f6f1ff'],['BELUM DIBAYAR',unpaidTotal,'#e45c16','#fff5ec']];
  const htmlPages=pages.map((page,pageIndex)=>{
    const metricHtml='';
-   const body=page.map((t,i)=>`<tr style="background:${i%2?'#ffffff':'#f2f6fa'}"><td>${escHtml(t.invoice)}</td><td>${escHtml(t.bidNo)}</td><td class="cjk">${escHtml(t.itemName)}</td><td>${escHtml(t.bidder)}</td><td class="num">${money(t.price)}</td><td class="center">${Number(t.qty||1)}</td><td class="num">${money(t.total)}</td><td class="status ${/BELUM/i.test(String(t.payment||'BELUM BAYAR'))?'unpaid':'paid'}">${escHtml(String(t.payment||'BELUM BAYAR').toUpperCase())}</td></tr>`).join('');
+   const body=page.map((t,i)=>`<tr style="background:${i%2?'#ffffff':'#f2f6fa'}"><td>${escHtml(t.invoice)}</td><td>${escHtml(t.bidNo)}</td><td class="cjk">${escHtml(t.itemName)}</td><td>${escHtml(t.bidder)}</td><td class="num">${money(t.price)}</td><td class="center">${Number(t.qty||1)}</td><td class="num">${money(t.total)}</td><td class="num">${money(t.overpay||0)}</td><td class="status ${/BELUM/i.test(String(t.payment||'BELUM BAYAR'))?'unpaid':'paid'}">${escHtml(String(t.payment||'BELUM BAYAR').toUpperCase())}</td></tr>`).join('');
    const totals='';
    return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
     <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">${currentSite==='dana'?'YAYASAN VIHARA DHARMA SHANTI':'YAYASAN VIHARA DHARMA SHANTI'}</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">${currentSite==='dana'?'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI DANA PARAMITA':'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${currentSite==='dana'?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
     <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}</div>
     ${metricHtml}<div style="font:700 15px Arial;color:${reportDark};margin:0 0 10px">${pageIndex===0?'DAFTAR TRANSAKSI':'DAFTAR TRANSAKSI (LANJUTAN)'}</div>
-    <table class="transactions"><thead><tr>${['NO NOTA',currentSite==='dana'?'ORDER NO':'BID NO','NAMA BARANG',currentSite==='dana'?'NAMA DONATUR':'NAMA BIDDER',currentSite==='dana'?'NOMINAL DANA':'HARGA BIDDING','QTY','TOTAL','PEMBAYARAN'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>${totals}
+    <table class="transactions"><thead><tr>${['NO NOTA','BID NO','NAMA BARANG','NAMA BIDDER','HARGA BIDDING','QTY','TOTAL','LEBIH BAYAR','PEMBAYARAN'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>${totals}
     <div style="position:absolute;left:42px;right:42px;bottom:17px;border-top:1px solid #dce2e9;padding-top:8px;display:flex;justify-content:space-between;font:10px Arial;color:#8994a1"><span>${currentSite==='dana'?'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Dana Paramita':'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Bidding'}</span><span>2026</span></div>
    </section>`;
  }).join('');
