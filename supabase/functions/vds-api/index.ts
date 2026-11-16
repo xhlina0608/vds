@@ -41,7 +41,8 @@ async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
   if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid.");
   const permissions = actor.profile.permissions || {};
-  if (!isAdmin(actor.profile) && permissions[site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor"] !== true)
+  const permissionKey = site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor";
+  if (!isAdmin(actor.profile) && permissions[permissionKey] !== true)
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }
