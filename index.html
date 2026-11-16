@@ -1315,7 +1315,7 @@ function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.
  let data=null;
  try{data=JSON.parse(localStorage.getItem(key)||'null');localStorage.removeItem(key);}catch(e){}
  history.replaceState(null,'',location.pathname+location.search);
- if(!data||!data.token||!data.username||!['bidding','dana'].includes(requestedSite)||
+ if(!data||!data.token||!data.username||!['bidding','dana','sponsor'].includes(requestedSite)||
     data.site!==requestedSite||!data.expires||Date.now()>data.expires){
   alert('Sesi untuk tab baru tidak tersedia atau sudah kedaluwarsa. Silakan login kembali.');
   return;
@@ -1338,10 +1338,10 @@ async function vdsRestoreRememberedSession(){
  let saved=null;try{saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'null')}catch(e){}
  if(!token||!saved||!saved.username||!saved.profile)return;
  vdsAccessToken=token;currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=saved.profile;
- const site=['bidding','dana'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
+ const site=['bidding','dana','sponsor'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
  try{
   // A small authenticated read verifies that the stored token is still valid.
-  await vdsApi('get-state',{site:site==='dana'?'dana':'bidding'},token);
+  await vdsApi('get-state',{site:site==='dana'?'dana':site==='sponsor'?'sponsor':'bidding'},token);
   document.getElementById('login').style.display='none';
   if(site){await openSite(site,true);}
   else{
