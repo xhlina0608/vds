@@ -41,8 +41,10 @@ async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
   if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid. Identitas website tidak dikenali oleh API.");
   const permissions = actor.profile.permissions || {};
-  const permissionKey = site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor";
-  if (!isAdmin(actor.profile) && permissions[permissionKey] !== true)
+  const allowed = site === "bidding" ? permissions.siteBidding === true
+    : site === "dana" ? permissions.siteDana === true
+    : (permissions.siteSponsor === true || permissions.siteBidding === true || permissions.siteDana === true);
+  if (!isAdmin(actor.profile) && !allowed)
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }

@@ -1,38 +1,12 @@
-VDS — PERBAIKAN FINAL 3 WEBSITE
-================================
+VDS - FITUR DATA SPONSOR BERSAMA
 
-Perbaikan yang ditargetkan:
-1. API menerima identitas website sponsor dengan benar. Regex normalizeSite sebelumnya salah escape: huruf "s" dianggap pemisah, sehingga "sponsor" berubah menjadi "ponsor" dan ditolak.
-2. Pergantian website dilakukan di TAB YANG SAMA. Tidak membuka tab baru, tidak perlu login ulang, dan tidak kembali ke halaman pilih website akibat race session/handoff.
-3. Data Bidding, Dana Paramita, dan Sponsor tetap memakai penyimpanan terpisah berdasarkan site.
+Paket ini memperbarui website gabungan Bidding + Dana Paramita. Kedua website akan memakai satu data sponsor yang sama melalui app_state site=sponsor.
 
-ISI PAKET
----------
-1-VERCEL/index.html  -> ganti file index.html pada repository GitHub/Vercel.
-2-SUPABASE/index.ts  -> ganti source Edge Function vds-api di Supabase.
-3-BACKUP/            -> source sebelum perbaikan untuk rollback.
+1. BACKUP file website dan Edge Function yang sekarang.
+2. Vercel: ganti file 1-VERCEL/index.html ke project website Bidding/Dana Paramita yang sedang dipakai, lalu deploy.
+3. Supabase: Edge Functions > vds-api > Code. Ganti isi dengan 2-SUPABASE/index.ts lalu Deploy.
+4. Tidak ada SQL migration. Tidak menghapus tabel atau data lama.
+5. Login, buka Data Sponsor dan Data Sponsor Barang dari Bidding. Tambah data uji, lalu buka Dana Paramita dan pastikan data yang sama tampil.
+6. Hanya setelah tes berhasil, pertimbangkan menonaktifkan project/website sponsor lama. Jangan hapus database app_state atau baris site=sponsor.
 
-CARA PASANG
------------
-A. GitHub/Vercel
-1. Buka repository yang terhubung ke Vercel VDS.
-2. Ganti isi index.html dengan file 1-VERCEL/index.html.
-3. Commit/push dan tunggu deployment selesai.
-
-B. Supabase
-1. Buka project gmpedvbzmgrpwsgsyszj.
-2. Edge Functions -> vds-api -> Code.
-3. Ganti seluruh source dengan 2-SUPABASE/index.ts.
-4. Deploy function vds-api.
-
-JANGAN jalankan SQL migration, jangan hapus tabel/data, jangan ganti Supabase URL/key/secrets.
-
-TES SETELAH DEPLOY
-------------------
-1. Login sekali.
-2. Buka Bidding, pastikan data lama tampil.
-3. Klik Pilih Website -> pilih Dana Paramita. Harus berpindah di tab yang sama tanpa login ulang.
-4. Klik Pilih Website -> pilih Data Sponsor. Harus terbuka tanpa pesan "Website tidak valid".
-5. Kembali ke Bidding dan Dana untuk memastikan keduanya tetap normal.
-
-Catatan: file telah diperiksa secara statis. Hasil live baru dapat dipastikan setelah kedua file dideploy ke Vercel dan Supabase.
+Catatan: akses data bersama diberikan kepada akun yang memiliki akses Bidding atau Dana Paramita. Data lama pada app_state site=sponsor (donors/sponsors) tetap dipakai. Jika data sponsor barang lama hanya ada pada state lokal Bidding/Dana, sistem menyalinnya satu kali saat database sponsor bersama masih kosong.
