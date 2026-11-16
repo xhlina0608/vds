@@ -1338,10 +1338,11 @@ async function vdsRestoreRememberedSession(){
  let saved=null;try{saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'null')}catch(e){}
  if(!token||!saved||!saved.username||!saved.profile)return;
  vdsAccessToken=token;currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=saved.profile;
- const site=['bidding','dana','sponsor'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
+ const rememberedSite=['bidding','dana','sponsor'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
+ const site=['bidding','dana','sponsor'].includes(rememberedSite)?rememberedSite:'bidding';
  try{
   // A small authenticated read verifies that the stored token is still valid.
-  await vdsApi('get-state',{site:site==='dana'?'dana':site==='sponsor'?'sponsor':'bidding'},token);
+  await vdsApi('get-state',{site},token);
   document.getElementById('login').style.display='none';
   if(site){await openSite(site,true);}
   else{
