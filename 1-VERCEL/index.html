@@ -393,18 +393,13 @@ async function vdsLoadUsers(){
 
 async function openSite(site, inNewTab=false){
  if(site!=='bidding'&&site!=='dana')return;
- // Pilihan pertama sesudah login tetap di tab yang sama. Tab baru hanya untuk aksi ganti website.
+ // Perpindahan dari tombol Pilih Website membuka tab baru dengan handoff sesi.
  const switchToNewTab=!inNewTab&&!!window.__switchWebsiteNewTab;
  window.__switchWebsiteNewTab=false;
  if(switchToNewTab){
-  // Handoff singkat agar tab baru bisa memakai sesi login yang sedang aktif.
-  // Token hanya disimpan sementara dan langsung dihapus oleh tab tujuan.
   const handoffKey='vdsWebsiteTabHandoff';
   try{
-   localStorage.setItem(handoffKey,JSON.stringify({
-    token:vdsAccessToken,username:currentUser,role:currentRole,
-    profile:currentProfile,site:site,expires:Date.now()+60000
-   }));
+   localStorage.setItem(handoffKey,JSON.stringify({token:vdsAccessToken,username:currentUser,role:currentRole,profile:currentProfile,site:site,expires:Date.now()+60000}));
   }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
   const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
   const opened=window.open(target,'_blank');
@@ -438,7 +433,29 @@ async function openSite(site, inNewTab=false){
  const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
  setRoleUI();go('dashboard');
 }
-function backToPortal(){vdsStopRealtime();if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana'))){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
+async function backToPortal(){
+ if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana')))return;
+ // Simpan snapshot website yang sedang dibuka SEBELUM currentSite berubah.
+ // Ini mencegah debounce save menulis data Bidding ke Dana (atau sebaliknya).
+ const previousSite=currentSite;
+ let previousState;
+ try{previousState=JSON.parse(JSON.stringify(state));}catch(e){previousState=state;}
+ try{localStorage.setItem(previousSite==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(previousState));}catch(e){}
+ clearTimeout(vdsSaveTimer);
+ // Tunggu request simpan yang sedang berjalan agar urutan simpan tetap aman.
+ while(vdsSaving)await new Promise(resolve=>setTimeout(resolve,50));
+ try{
+  if(vdsAccessToken&&previousSite)await vdsApi('save-state',{site:previousSite,state:previousState});
+ }catch(e){
+  alert('Data belum berhasil disimpan ke cloud. Website tidak akan ditutup.\n'+(e.message||e));
+  return;
+ }
+ vdsStopRealtime();
+ // Pilihan website berikutnya membuka tab baru, sesi login dibawa otomatis.
+ window.__switchWebsiteNewTab=true;
+ document.getElementById('app').style.display='none';
+ document.getElementById('sitePortal').style.display='grid';
+}
 function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}

@@ -1,0 +1,31 @@
+VDS - PAKET FINAL 2 WEBSITE + SPONSOR BERSAMA
+==============================================
+
+ISI WEBSITE
+- Hanya ada 2 pilihan website: WEBSITE BIDDING dan DANA PARAMITA.
+- Keduanya memiliki menu Data Sponsor dan Data Sponsor Barang.
+- Kedua menu membaca/menyimpan satu data sponsor bersama (site=sponsor).
+- Data transaksi Bidding dan Dana Paramita tetap terpisah.
+- Tombol "Pilih Website" kembali ke pemilihan website; saat memilih website tujuan, website terbuka di TAB BARU tanpa login ulang.
+- Saat berpindah website, snapshot website lama disimpan dahulu sebelum website baru dimuat.
+
+FILE DALAM ZIP
+1-VERCEL/index.html : ganti file index.html di project GitHub/Vercel.
+2-SUPABASE/index.ts : ganti kode Edge Function vds-api di Supabase.
+
+CARA UPLOAD
+1. Backup dulu file index.html dan kode Edge Function vds-api yang sekarang.
+2. GitHub/Vercel: ganti index.html dengan file 1-VERCEL/index.html, lalu commit/push.
+3. Tunggu deployment Vercel selesai pada project yang terhubung ke vds.onesolution.my.id.
+4. Supabase project vds > Edge Functions > vds-api > Code: ganti seluruh isi dengan 2-SUPABASE/index.ts, lalu Deploy.
+5. Tidak perlu menjalankan SQL migration baru untuk paket ini.
+6. Buka vds.onesolution.my.id, tekan Ctrl+F5, lalu login.
+7. Halaman Pilih Website harus hanya menampilkan Bidding dan Dana Paramita.
+8. Di sidebar KEDUA website harus ada Data Sponsor dan Data Sponsor Barang.
+9. Uji tambah data di Bidding, lalu buka Dana Paramita dan pastikan data yang sama terlihat.
+
+PENTING
+- Jangan hapus tabel app_state atau baris site=sponsor di Supabase.
+- Jangan menghapus data transaksi Bidding/Dana.
+- Website Sponsor lama tidak perlu dipakai lagi setelah dua website di atas lolos tes.
+- Jika tile Website Data Sponsor masih muncul setelah deployment, berarti domain masih memakai deployment/project atau index.html versi lama.
