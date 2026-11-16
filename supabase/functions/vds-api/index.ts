@@ -39,9 +39,9 @@ async function requireAdmin(req: Request) {
 }
 async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
-  if (!["bidding", "dana"].includes(site)) throw new Error("Website tidak valid.");
+  if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid.");
   const permissions = actor.profile.permissions || {};
-  if (!isAdmin(actor.profile) && permissions[site === "bidding" ? "siteBidding" : "siteDana"] !== true)
+  if (!isAdmin(actor.profile) && permissions[site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor"] !== true)
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
       }
       const { error: pErr } = await adminDb.from("profiles").upsert({
         id: user.id, username, role: "admin", active: true, must_change_password: false,
-        permissions: { siteBidding: true, siteDana: true },
+        permissions: { siteBidding: true, siteDana: true, siteSponsor: true },
       }, { onConflict: "id" });
       if (pErr) throw pErr;
       return reply({ ok: true, username });
@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
       if (error) throw error;
       const { error: pErr } = await adminDb.from("profiles").upsert({
         id: data.user.id, username, role, active: true,
-        permissions: role === "admin" ? { siteBidding: true, siteDana: true } : permissions,
+        permissions: role === "admin" ? { siteBidding: true, siteDana: true, siteSponsor: true } : permissions,
         must_change_password: true,
       }, { onConflict: "id" });
       if (pErr) throw pErr;
