@@ -1,0 +1,17 @@
+VDS SPONSOR FIX — PACKAGE
+
+Isi:
+1. index.html — website utama, termasuk Data Sponsor.
+2. supabase/functions/vds-api/index.ts — Edge Function API yang mendukung website:
+   bidding, dana, sponsor.
+
+Perubahan:
+- Ganti website dilakukan di tab yang sama (tidak membuka tab baru lalu kembali ke portal).
+- Pemulihan login memvalidasi sesi, bukan memaksa akun memiliki akses ke Website Bidding.
+- API menyediakan action validate-session dan mendukung identitas website sponsor.
+
+PENTING:
+- Upload/deploy index.html ke hosting Vercel sebagai file website.
+- File index.ts harus di-deploy ke Supabase Edge Function bernama vds-api.
+- Jangan menghapus data/tabel Supabase dan jangan menjalankan SQL migration untuk paket ini.
+- Jika memakai Vercel Git deployment, letakkan index.html sebagai file utama/root website.

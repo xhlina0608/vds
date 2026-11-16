@@ -350,24 +350,6 @@ async function vdsLoadUsers(){
 
 async function openSite(site, inNewTab=false){
  if(!['bidding','dana','sponsor'].includes(site))return;
- // Pilihan pertama sesudah login tetap di tab yang sama. Tab baru hanya untuk aksi ganti website.
- const switchToNewTab=!inNewTab&&!!window.__switchWebsiteNewTab;
- window.__switchWebsiteNewTab=false;
- if(switchToNewTab){
-  // Handoff singkat agar tab baru bisa memakai sesi login yang sedang aktif.
-  // Token hanya disimpan sementara dan langsung dihapus oleh tab tujuan.
-  const handoffKey='vdsWebsiteTabHandoff';
-  try{
-   localStorage.setItem(handoffKey,JSON.stringify({
-    token:vdsAccessToken,username:currentUser,role:currentRole,
-    profile:currentProfile,site:site,expires:Date.now()+60000
-   }));
-  }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
-  const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
-  const opened=window.open(target,'_blank');
-  if(!opened){localStorage.removeItem(handoffKey);alert('Tab baru diblokir browser. Izinkan pop-up untuk website ini, lalu coba lagi.');}
-  return;
- }
  if(!isAdmin()&&!hasPermission(site==='bidding'?'siteBidding':site==='dana'?'siteDana':'siteSponsor')){alert('Akses ke website ini belum diberikan oleh Admin.');return;}
  currentSite=site;document.body.classList.toggle('site-dana',site==='dana');try{localStorage.setItem('vds_last_site',site);const saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'{}');saved.site=site;localStorage.setItem('vds_remembered_session',JSON.stringify(saved));}catch(e){}
  // Tombol pindah website hanya tampil bila akun memang memiliki akses ke KEDUA website.
@@ -397,7 +379,7 @@ async function openSite(site, inNewTab=false){
  document.querySelectorAll('.actions button').forEach(b=>{if(['exportExcel','exportPDF','backupBtn','restoreBtn'].includes(b.id)||b.classList.contains('admin-only'))b.style.display=site==='sponsor'?'none':'';});
  setRoleUI();go('dashboard');
 }
-function backToPortal(){vdsStopRealtime();if(!isAdmin()&&['siteBidding','siteDana','siteSponsor'].filter(k=>hasPermission(k)).length<2){return;}persist();window.__switchWebsiteNewTab=true;document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
+function backToPortal(){vdsStopRealtime();if(!isAdmin()&&['siteBidding','siteDana','siteSponsor'].filter(k=>hasPermission(k)).length<2){return;}persist();document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='grid';}
 function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function go(p){
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
@@ -1341,7 +1323,7 @@ async function vdsRestoreRememberedSession(){
  try{
   // Validasi token tanpa membuka website terakhir secara otomatis.
   // Setiap domain baru kembali ke portal agar pengguna memilih website sendiri.
-  await vdsApi('get-state',{site:'bidding'},token);
+  await vdsApi('validate-session',{},token);
   document.getElementById('login').style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('sitePortal').style.display='grid';
