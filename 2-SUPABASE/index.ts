@@ -39,7 +39,7 @@ async function requireAdmin(req: Request) {
 }
 async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
-  if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid.");
+  if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid. Identitas website tidak dikenali oleh API.");
   const permissions = actor.profile.permissions || {};
   const permissionKey = site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor";
   if (!isAdmin(actor.profile) && permissions[permissionKey] !== true)
@@ -49,10 +49,10 @@ async function requireSiteAccess(req: Request, site: string) {
 
 function normalizeSite(body: any): string {
   const raw = body?.site ?? body?.site_id ?? body?.website ?? body?.website_id ?? "";
-  const value = String(raw).trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\\s+/g, " ");
+  const value = String(raw).trim().toLowerCase().replace(/[\\s_-]+/g, " ").replace(/\\s+/g, " ");
   if (["bidding", "website bidding", "website 1", "1"].includes(value)) return "bidding";
   if (["dana", "dana paramita", "website dana", "website 2", "2"].includes(value)) return "dana";
-  if (["sponsor", "sponsors", "data sponsor", "website sponsor", "website 3", "3"].includes(value)) return "sponsor";
+  if (["sponsor", "sponsors", "data sponsor", "data sponsor barang", "sponsor data", "website sponsor", "website 3", "3"].includes(value)) return "sponsor";
   return "";
 }
 

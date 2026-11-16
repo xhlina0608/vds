@@ -31,7 +31,7 @@ async function getActor(req: Request) {
   if (pErr || !profile || profile.active === false) throw new Error("Akun tidak aktif atau profil tidak ditemukan.");
   return { user: data.user, profile, token };
 }
-function isAdmin(profile: any) { return profile.role === "admin" && profile.active !== false; }
+function isAdmin(profile: any) { return String(profile?.role || "").toLowerCase() === "admin" && profile.active !== false; }
 async function requireAdmin(req: Request) {
   const actor = await getActor(req);
   if (!isAdmin(actor.profile)) throw new Error("Aksi ini hanya boleh dilakukan Admin.");
@@ -46,6 +46,16 @@ async function requireSiteAccess(req: Request, site: string) {
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }
+
+function normalizeSite(body: any): string {
+  const raw = body?.site ?? body?.site_id ?? body?.website ?? body?.website_id ?? "";
+  const value = String(raw).trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\\s+/g, " ");
+  if (["bidding", "website bidding", "website 1", "1"].includes(value)) return "bidding";
+  if (["dana", "dana paramita", "website dana", "website 2", "2"].includes(value)) return "dana";
+  if (["sponsor", "sponsors", "data sponsor", "website sponsor", "website 3", "3"].includes(value)) return "sponsor";
+  return "";
+}
+
 function maxNumeric(values: unknown[], fallback = 0) {
   const nums = values.map(v => Number(String(v ?? "").replace(/[^\d]/g, ""))).filter(n => Number.isFinite(n));
   return Math.max(fallback, ...nums);
@@ -163,7 +173,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "allocate-transaction-numbers") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const { data: current, error: stateErr } = await adminDb.from("app_state").select("payload").eq("site", site).maybeSingle();
       if (stateErr) throw stateErr;
@@ -181,7 +191,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "get-sync-events") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const afterId = Math.max(0, Number(body.after_id || 0));
       const { data, error } = await adminDb.from("vds_sync_events")
@@ -192,7 +202,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "get-state" || action === "save-state") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       const actor = await requireSiteAccess(req, site);
       if (action === "get-state") {
         const { data, error } = await adminDb.from("app_state").select("payload,updated_at").eq("site", site).maybeSingle();

@@ -1,42 +1,57 @@
-PAKET PERBAIKAN VDS – 3 WEBSITE
-=================================
+VDS – PERBAIKAN WEBSITE SPONSOR (3 WEBSITE)
+=============================================
 
-Isi:
+PAKET INI MEMPERBAIKI:
+1. Halaman Sponsor tidak lagi ditimpa oleh tabel generik.
+2. Halaman Sponsor menampilkan ringkasan donatur, total donasi, sponsor barang, dan total barang.
+3. Fungsi tambah/edit/hapus dan export PDF yang sudah ada tetap digunakan.
+4. Normalisasi nama website di API diperbaiki agar variasi spasi/underscore/hyphen dikenali.
+5. Website Bidding dan Dana Paramita tetap dipertahankan.
+
+ISI FOLDER
+----------
 1-VERCEL/index.html
-  Frontend VDS dengan pilihan Bidding, Dana Paramita, dan Data Sponsor.
-  Gunakan untuk mengganti index.html pada repository GitHub yang terhubung ke Vercel.
+  File frontend pengganti untuk repository Vercel.
 
 2-SUPABASE/index.ts
-  Edge Function vds-api yang diperbarui.
-  Perubahan:
-  - Normalisasi identitas website (bidding, dana, sponsor; termasuk alias "Data Sponsor"/"Website 3").
-  - Pemeriksaan role admin dibuat tidak sensitif huruf besar/kecil.
-  - Tidak menghapus atau mengubah tabel/database dan tidak menjalankan migration.
+  File Edge Function pengganti untuk Supabase > Edge Functions > vds-api.
 
-3-BACKUP/index-original.ts
-  Salinan backend sebelum perubahan, untuk cadangan.
+3-BACKUP/
+  Salinan file asli sebelum perbaikan.
 
-CARA PEMASANGAN (URUTAN WAJIB)
-------------------------------
+CARA PASANG (URUTAN)
+--------------------
 A. VERCEL / GITHUB
-1. Buka repository GitHub VDS yang sekarang dipakai Vercel.
-2. Download/cadangkan index.html lama terlebih dahulu.
-3. Upload file 1-VERCEL/index.html ke lokasi index.html yang sama di repository.
-4. Commit perubahan dan tunggu Vercel selesai deploy.
+1. Buka repository GitHub yang saat ini dipakai oleh project Vercel VDS.
+2. Cari file HTML utama yang sekarang menjadi halaman VDS (index.html).
+3. Ganti ISI file itu dengan isi file 1-VERCEL/index.html.
+4. Commit perubahan dan tunggu deployment Vercel selesai.
+   Jangan menghapus file lain dari repository.
 
 B. SUPABASE
-1. Buka project Supabase VDS: gmpedvbzmgrpwsgsyszj.
+1. Buka project Supabase VDS yang benar: gmpedvbzmgrpwsgsyszj.
 2. Buka Edge Functions > vds-api > Code.
-3. Ganti isi kode function dengan seluruh isi file 2-SUPABASE/index.ts.
-4. Klik Deploy / Save and Deploy.
-5. Pastikan deployment berhasil.
+3. Ganti source function dengan isi 2-SUPABASE/index.ts.
+4. Klik Deploy.
+5. Pastikan function yang di-deploy bernama tepat: vds-api.
 
 PENTING
 -------
-- Jangan upload folder 1-VERCEL ke Supabase.
-- Jangan upload index.ts ke Vercel.
-- Jangan jalankan SQL migration.
+- Jangan jalankan SQL migration ulang.
 - Jangan hapus tabel, data, user, atau project.
-- Jangan mengubah Secrets Supabase.
-- File frontend ini berdasarkan source yang diberikan. Backend telah diberi normalisasi alias website untuk mencegah variasi penamaan "Sponsor" ditolak.
-- Saya tidak dapat menguji deployment di akun Vercel/Supabase Anda dari sini. Setelah kedua deployment berhasil, tes ketiga website. Jika masih gagal, simpan screenshot pesan error terbaru.
+- Jangan mengganti Supabase URL / publishable key.
+- Jangan upload seluruh ZIP ke satu tempat. Ambil file sesuai foldernya.
+- Backend menggunakan secrets yang sudah ada: SUPABASE_URL, SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY, dan VDS_BOOTSTRAP_SECRET. Jangan kirim secret ke chat.
+- Setelah deployment, logout lalu login kembali dan tes ketiga website.
+- Jika API masih mengembalikan HTTP 400, kirim teks error dari pop-up. Paket ini
+  memperbaiki kesalahan frontend yang ditemukan dan normalisasi nama website,
+  tetapi tidak mengklaim sudah diuji pada project Supabase live.
+
+URUTAN TES
+----------
+1. Bidding: buka dashboard dan pastikan data lama terlihat.
+2. Dana Paramita: buka dan pastikan data lama terlihat.
+3. Data Sponsor: buka, pastikan halaman Donatur dan Sponsor Barang tampil.
+4. Tambah satu data percobaan hanya jika memang ingin menguji penyimpanan cloud.
+   Hapus data percobaan setelah tes.
