@@ -1,43 +1,12 @@
-VDS - PERBAIKAN FINAL: DUA WEBSITE + DATA SPONSOR BERSAMA
-========================================================
+CARA UPLOAD VDS - HAPUS FITUR SPONSOR
 
-PENTING: Paket ini sudah disusun untuk Vercel yang memakai Root Directory = ./
-Jangan upload file dari folder 1-VERCEL. Pakai index.html di folder utama ZIP ini.
+1. Backup repository GitHub terlebih dahulu.
+2. Buka ZIP ini dan ambil index.html.
+3. Di repository GitHub VDS, buka index.html pada ROOT repository (bukan subfolder).
+4. Replace seluruh isi/file index.html dengan file dari ZIP ini.
+5. Commit perubahan.
+6. Tunggu Vercel deployment Production selesai.
+7. Buka website dan tekan Ctrl+Shift+R.
 
-ISI:
-- index.html: aplikasi frontend final untuk Vercel.
-- supabase/functions/vds-api/index.ts: Edge Function vds-api.
-- supabase/migrations/005_shared_sponsor_workspace.sql: perbaikan database sponsor bersama.
-
-URUTAN WAJIB:
-1. Backup repository GitHub dan database Supabase sebelum mengganti apa pun.
-2. Supabase > SQL Editor > New query. Buka dan jalankan seluruh isi file:
-   supabase/migrations/005_shared_sponsor_workspace.sql
-   Pastikan hasilnya Success.
-3. Supabase > Edge Functions > vds-api > Code.
-   Ganti seluruh kode dengan file:
-   supabase/functions/vds-api/index.ts
-   Klik Deploy.
-4. GitHub repository VDS (root repository): ganti file index.html dengan index.html dari ZIP ini.
-   Jangan taruh di subfolder. Commit perubahan.
-5. Vercel > Project VDS > Settings > General: pastikan Root Directory = ./ (kosong/root).
-   Framework Preset boleh Other. Build Command kosong, Output Directory kosong/default.
-6. Tunggu deployment Production selesai.
-7. Buka https://vds.onesolution.my.id lalu tekan Ctrl+Shift+R.
-
-HASIL YANG DIHARAPKAN:
-- Pilih Website hanya menampilkan WEBSITE BIDDING dan DANA PARAMITA.
-- Sidebar kedua website menampilkan Data Sponsor dan Data Sponsor Barang.
-- Data sponsor dan sponsor barang sama di kedua website karena memakai app_state site=sponsor.
-- Data transaksi Bidding dan Dana Paramita tetap terpisah.
-- Tombol Pilih Website menyimpan website aktif dahulu. Memilih website tujuan membuka TAB BARU tanpa meminta login ulang.
-
-JANGAN:
-- Jangan hapus tabel app_state.
-- Jangan hapus baris app_state site=bidding atau site=dana.
-- Jangan hapus project Vercel atau project Supabase.
-- Jangan menjalankan ulang schema penuh di atas database produksi; cukup migration 005 ini.
-
-CATATAN:
-Paket ini memperbaiki file dan database contract berdasarkan source ZIP yang diberikan.
-Deployment tetap perlu dilakukan di akun GitHub/Vercel/Supabase Anda dan diverifikasi setelah upload.
+JANGAN menjalankan SQL migration. JANGAN menghapus tabel app_state atau data transaksi.
+Data sponsor lama di Supabase tidak dihapus; hanya fitur/menu aplikasinya yang dihilangkan.

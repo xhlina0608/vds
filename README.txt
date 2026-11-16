@@ -1,15 +1,15 @@
-VDS FINAL UPLOAD - SHARED SPONSOR + EXPORT TABLE STYLE
+VDS - TANPA FITUR DATA SPONSOR / DONATUR TERPISAH
 
-File utama: index.html
-Supabase function: supabase/functions/vds-api/index.ts
-Migration: supabase/migrations/005_shared_sponsor_workspace.sql
+Perubahan:
+- Menu Data Sponsor dihapus.
+- Menu Data Sponsor Barang dihapus.
+- Modul halaman, cetak, edit, hapus, dan sinkronisasi khusus dua fitur tersebut dihapus dari frontend.
+- Fitur transaksi utama Bidding dan Dana Paramita tetap dipertahankan.
+- Kolom/nama donatur yang dipakai sebagai bagian dari pencatatan transaksi Dana Paramita tetap dipertahankan.
 
-Perubahan tambahan:
-- Export/Cetak PDF Data Sponsor (Daftar Donatur dan Daftar Sponsor Barang)
-  menggunakan gaya tabel seperti PDF Daftar Harga: header navy, teks putih,
-  baris selang-seling putih/abu muda, border rapi, dan layout A4.
-- Daftar Sponsor Barang dipaginasi 20 baris per halaman.
-- Daftar Donatur memakai format tabel dan mata uang rata kanan.
+Pemasangan:
+- Ganti index.html pada root repository GitHub dengan file index.html dari paket ini.
+- Commit dan tunggu Vercel selesai deploy.
+- Tidak perlu menjalankan SQL migration atau mengganti Edge Function untuk perubahan ini.
 
-Upload index.html ke root project Vercel/GitHub seperti petunjuk CARA-UPLOAD.txt.
-Jangan menghapus tabel atau data transaksi Supabase yang sudah ada.
+Catatan: data lama di database sponsor tidak dihapus. Modulnya saja yang dihilangkan dari aplikasi, sehingga data lama tidak terhapus permanen.
