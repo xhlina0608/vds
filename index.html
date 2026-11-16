@@ -912,7 +912,24 @@ async function exportDanaExcelPreservingTemplate(){
   // Sheet RINCIAN sudah memakai tata letak dashboard website dan formula otomatis.
   // Hanya nilai kas fisik yang diisi manual; selisih cash dan rekening dihitung oleh rumus.
   const detailDoc=await getSheet('RINCIAN');
+  // Perbaiki ringkasan RINCIAN: total pembayaran wajib mencakup kolom H (Lebih Bayar).
+  // Grand total dan belum dibayar tetap memakai nilai barang di kolom G saja.
+  setFormulaCell(detailDoc,'A2',"SUM('LIVE LAPORAN DANA'!G2:G501)",total());
+  setFormulaCell(detailDoc,'C2',"SUMIF('LIVE LAPORAN DANA'!I2:I501,\"CASH\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"CASH\",'LIVE LAPORAN DANA'!H2:H501)",paid('CASH'));
+  setFormulaCell(detailDoc,'E2',"SUMIF('LIVE LAPORAN DANA'!I2:I501,\"TRANSFER\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"TRANSFER\",'LIVE LAPORAN DANA'!H2:H501)",paid('TRANSFER'));
+  setFormulaCell(detailDoc,'G2',"SUMIF('LIVE LAPORAN DANA'!I2:I501,\"QRIS\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"QRIS\",'LIVE LAPORAN DANA'!H2:H501)",paid('QRIS'));
+  setFormulaCell(detailDoc,'A5',"SUMIF('LIVE LAPORAN DANA'!I2:I501,\"\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"BELUM BAYAR\",'LIVE LAPORAN DANA'!G2:G501)",unpaid());
   setCell(detailDoc,'A9',Number(state.cashActual||0));
+  setFormulaCell(detailDoc,'C9',"A9-SUMIF('LIVE LAPORAN DANA'!I2:I501,\"CASH\",'LIVE LAPORAN DANA'!G2:G501)-SUMIF('LIVE LAPORAN DANA'!I2:I501,\"CASH\",'LIVE LAPORAN DANA'!H2:H501)",Number(state.cashActual||0)-paid('CASH'));
+  setFormulaCell(detailDoc,'E9',"SUMIF('LIVE LAPORAN DANA'!I2:I501,\"TRANSFER\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"TRANSFER\",'LIVE LAPORAN DANA'!H2:H501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"QRIS\",'LIVE LAPORAN DANA'!G2:G501)+SUMIF('LIVE LAPORAN DANA'!I2:I501,\"QRIS\",'LIVE LAPORAN DANA'!H2:H501)",paid('TRANSFER')+paid('QRIS'));
+  // Hilangkan proteksi worksheet pada file export Bidding dan Dana Paramita.
+  const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  for(const name of Object.keys(sheetPaths)){
+    const doc=await getSheet(name);
+    for(const protection of Array.from(doc.getElementsByTagNameNS(ns,'sheetProtection'))){
+      protection.parentNode?.removeChild(protection);
+    }
+  }
   for(const [name,doc] of Object.entries(xmlDocs)){
     zip.file(sheetPaths[name],serializer.serializeToString(doc));
   }
