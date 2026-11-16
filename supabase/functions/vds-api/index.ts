@@ -41,26 +41,20 @@ async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
   if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid. Identitas website tidak dikenali oleh API.");
   const permissions = actor.profile.permissions || {};
-  const permissionKey = site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor";
-  if (!isAdmin(actor.profile) && permissions[permissionKey] !== true)
+  const allowed = site === "bidding" ? permissions.siteBidding === true
+    : site === "dana" ? permissions.siteDana === true
+    : (permissions.siteSponsor === true || permissions.siteBidding === true || permissions.siteDana === true);
+  if (!isAdmin(actor.profile) && !allowed)
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }
 
 function normalizeSite(body: any): string {
-  // Accept both canonical IDs (bidding/dana/sponsor) and legacy UI labels
-  // (siteSponsor, Data Sponsor, Website 3). Never map an unknown value to a site.
-  const candidates = [
-    body?.site, body?.site_id, body?.siteId, body?.site_key, body?.siteKey,
-    body?.website, body?.website_id, body?.websiteId, body?.website_name,
-    body?.websiteName, body?.currentSite,
-  ];
-  const raw = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== "") ?? "";
-  const value = String(raw).normalize("NFKC").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
-
-  if (["bidding", "sitebidding", "websitebidding", "website1", "1"].includes(value)) return "bidding";
-  if (["dana", "danaparamita", "sitedana", "websitedana", "website2", "2"].includes(value)) return "dana";
-  if (["sponsor", "sponsors", "sitesponsor", "websitesponsor", "datasponsor", "datasponsorbarang", "sponsordata", "website3", "3"].includes(value)) return "sponsor";
+  const raw = body?.site ?? body?.site_id ?? body?.website ?? body?.website_id ?? "";
+  const value = String(raw).trim().toLowerCase().replace(/[\s_-]+/g, " ").replace(/\s+/g, " ");
+  if (["bidding", "website bidding", "website 1", "1"].includes(value)) return "bidding";
+  if (["dana", "dana paramita", "website dana", "website 2", "2"].includes(value)) return "dana";
+  if (["sponsor", "sponsors", "data sponsor", "data sponsor barang", "sponsor data", "website sponsor", "website 3", "3"].includes(value)) return "sponsor";
   return "";
 }
 
@@ -108,17 +102,6 @@ Deno.serve(async (req) => {
       return reply({ ok: true, session: data.session, user: {
         id: data.user.id, username: profile.username, role: profile.role, active: profile.active,
         permissions: profile.permissions || {}, must_change_password: profile.must_change_password,
-      }});
-    }
-
-    if (action === "validate-session") {
-      const actor = await getActor(req);
-      return reply({ ok: true, user: {
-        id: actor.user.id,
-        username: actor.profile.username,
-        role: actor.profile.role,
-        active: actor.profile.active !== false,
-        permissions: actor.profile.permissions || {},
       }});
     }
 
