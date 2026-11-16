@@ -1,57 +1,38 @@
-VDS – PERBAIKAN WEBSITE SPONSOR (3 WEBSITE)
-=============================================
+VDS — PERBAIKAN FINAL 3 WEBSITE
+================================
 
-PAKET INI MEMPERBAIKI:
-1. Halaman Sponsor tidak lagi ditimpa oleh tabel generik.
-2. Halaman Sponsor menampilkan ringkasan donatur, total donasi, sponsor barang, dan total barang.
-3. Fungsi tambah/edit/hapus dan export PDF yang sudah ada tetap digunakan.
-4. Normalisasi nama website di API diperbaiki agar variasi spasi/underscore/hyphen dikenali.
-5. Website Bidding dan Dana Paramita tetap dipertahankan.
+Perbaikan yang ditargetkan:
+1. API menerima identitas website sponsor dengan benar. Regex normalizeSite sebelumnya salah escape: huruf "s" dianggap pemisah, sehingga "sponsor" berubah menjadi "ponsor" dan ditolak.
+2. Pergantian website dilakukan di TAB YANG SAMA. Tidak membuka tab baru, tidak perlu login ulang, dan tidak kembali ke halaman pilih website akibat race session/handoff.
+3. Data Bidding, Dana Paramita, dan Sponsor tetap memakai penyimpanan terpisah berdasarkan site.
 
-ISI FOLDER
-----------
-1-VERCEL/index.html
-  File frontend pengganti untuk repository Vercel.
+ISI PAKET
+---------
+1-VERCEL/index.html  -> ganti file index.html pada repository GitHub/Vercel.
+2-SUPABASE/index.ts  -> ganti source Edge Function vds-api di Supabase.
+3-BACKUP/            -> source sebelum perbaikan untuk rollback.
 
-2-SUPABASE/index.ts
-  File Edge Function pengganti untuk Supabase > Edge Functions > vds-api.
+CARA PASANG
+-----------
+A. GitHub/Vercel
+1. Buka repository yang terhubung ke Vercel VDS.
+2. Ganti isi index.html dengan file 1-VERCEL/index.html.
+3. Commit/push dan tunggu deployment selesai.
 
-3-BACKUP/
-  Salinan file asli sebelum perbaikan.
+B. Supabase
+1. Buka project gmpedvbzmgrpwsgsyszj.
+2. Edge Functions -> vds-api -> Code.
+3. Ganti seluruh source dengan 2-SUPABASE/index.ts.
+4. Deploy function vds-api.
 
-CARA PASANG (URUTAN)
---------------------
-A. VERCEL / GITHUB
-1. Buka repository GitHub yang saat ini dipakai oleh project Vercel VDS.
-2. Cari file HTML utama yang sekarang menjadi halaman VDS (index.html).
-3. Ganti ISI file itu dengan isi file 1-VERCEL/index.html.
-4. Commit perubahan dan tunggu deployment Vercel selesai.
-   Jangan menghapus file lain dari repository.
+JANGAN jalankan SQL migration, jangan hapus tabel/data, jangan ganti Supabase URL/key/secrets.
 
-B. SUPABASE
-1. Buka project Supabase VDS yang benar: gmpedvbzmgrpwsgsyszj.
-2. Buka Edge Functions > vds-api > Code.
-3. Ganti source function dengan isi 2-SUPABASE/index.ts.
-4. Klik Deploy.
-5. Pastikan function yang di-deploy bernama tepat: vds-api.
+TES SETELAH DEPLOY
+------------------
+1. Login sekali.
+2. Buka Bidding, pastikan data lama tampil.
+3. Klik Pilih Website -> pilih Dana Paramita. Harus berpindah di tab yang sama tanpa login ulang.
+4. Klik Pilih Website -> pilih Data Sponsor. Harus terbuka tanpa pesan "Website tidak valid".
+5. Kembali ke Bidding dan Dana untuk memastikan keduanya tetap normal.
 
-PENTING
--------
-- Jangan jalankan SQL migration ulang.
-- Jangan hapus tabel, data, user, atau project.
-- Jangan mengganti Supabase URL / publishable key.
-- Jangan upload seluruh ZIP ke satu tempat. Ambil file sesuai foldernya.
-- Backend menggunakan secrets yang sudah ada: SUPABASE_URL, SUPABASE_ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY, dan VDS_BOOTSTRAP_SECRET. Jangan kirim secret ke chat.
-- Setelah deployment, logout lalu login kembali dan tes ketiga website.
-- Jika API masih mengembalikan HTTP 400, kirim teks error dari pop-up. Paket ini
-  memperbaiki kesalahan frontend yang ditemukan dan normalisasi nama website,
-  tetapi tidak mengklaim sudah diuji pada project Supabase live.
-
-URUTAN TES
-----------
-1. Bidding: buka dashboard dan pastikan data lama terlihat.
-2. Dana Paramita: buka dan pastikan data lama terlihat.
-3. Data Sponsor: buka, pastikan halaman Donatur dan Sponsor Barang tampil.
-4. Tambah satu data percobaan hanya jika memang ingin menguji penyimpanan cloud.
-   Hapus data percobaan setelah tes.
+Catatan: file telah diperiksa secara statis. Hasil live baru dapat dipastikan setelah kedua file dideploy ke Vercel dan Supabase.
