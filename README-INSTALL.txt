@@ -1,25 +1,30 @@
-VDS FIX HAPUS DATA TESTING - REPLACE V2
+VDS FIX HAPUS DATA TESTING - V3
 
-PENTING: Ini paket perbaikan baru, bukan ZIP sebelumnya.
+PERBAIKAN UTAMA:
+- Mencegah event transaksi lama diputar ulang setelah HAPUS DATA TESTING.
+- get-sync-events sekarang hanya mengirim event yang dibuat setelah timestamp reset terakhir.
+- save-state tidak lagi menerbitkan event transaksi lama yang terlambat masuk setelah reset.
+- Frontend mengabaikan event realtime yang timestamp-nya lebih lama dari reset.
+- Fitur dan tampilan lain dipertahankan dari paket V2, termasuk Nomor Item otomatis.
 
-1) GITHUB
-- Buka repository VDS, folder 1-VERCEL.
-- Replace file index.html dengan 1-VERCEL/index.html dari ZIP ini.
-- Commit ke branch main dan tunggu deployment Vercel selesai.
+CARA PASANG (REPLACE FILE SAJA):
+1. GitHub repository VDS > folder 1-VERCEL:
+   Replace index.html dengan file 1-VERCEL/index.html dari ZIP ini.
+   Commit ke branch main dan tunggu Vercel selesai deploy.
 
-2) SUPABASE EDGE FUNCTION
-- Buka Supabase > Edge Functions > vds-api > Code.
-- Replace isi file index.ts dengan 2-SUPABASE/index.ts dari ZIP ini.
-- Deploy ulang vds-api.
+2. Supabase > Edge Functions > vds-api:
+   Replace isi index.ts dengan file 2-SUPABASE/index.ts dari ZIP ini.
+   Deploy ulang function vds-api.
 
-3) SQL
-- Tidak perlu menjalankan migration 006 lagi. Migration tersebut sudah Anda jalankan.
+3. SQL migration 006 TIDAK perlu dijalankan ulang.
 
-4) SETELAH KEDUANYA DEPLOY
-- Logout lalu login kembali sebagai Admin.
-- Buka fitur HAPUS DATA TESTING dan jalankan sekali.
-- Sistem akan menghapus transaksi dan history untuk Bidding serta Dana Paramita, lalu membaca ulang database untuk verifikasi.
+4. Setelah frontend dan backend selesai deploy:
+   Logout, login kembali sebagai Admin, lalu jalankan HAPUS DATA TESTING sekali.
+   Refresh website untuk memastikan transaksi dan history tetap kosong.
 
-Yang dipertahankan: daftar harga/master item, akun, pengaturan, dan konfigurasi. Counter bidding pada item direset; nilai remain mengikuti nilai remain/stock yang tersimpan pada item.
+Yang dihapus hanya transaksi dan history testing pada Bidding dan Dana Paramita.
+Daftar harga, master item, akun, pengaturan, dan data inventori tidak sengaja dihapus.
 
-Jika ada error, pesan di website sekarang akan menyebut tahap yang gagal. Jangan jalankan HAPUS SEMUA DATA OPERASIONAL.
+Catatan validasi:
+- JavaScript frontend sudah diperiksa dengan node --check.
+- Kode Edge Function disusun untuk Deno/Supabase dan belum diuji langsung di project Supabase pengguna.

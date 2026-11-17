@@ -228,11 +228,19 @@ Deno.serve(async (req) => {
       const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const afterId = Math.max(0, Number(body.after_id || 0));
-      const { data, error } = await adminDb.from("vds_sync_events")
+      // A fresh browser starts with cursor 0. Never replay transaction events
+      // created before the latest explicit testing reset.
+      const { data: appState, error: stateError } = await adminDb.from("app_state")
+        .select("payload").eq("site", site).maybeSingle();
+      if (stateError) throw stateError;
+      const resetAt = appState?.payload?._testing_reset_at;
+      let eventsQuery = adminDb.from("vds_sync_events")
         .select("id,site,event_payload,created_at")
         .eq("site", site).gt("id", afterId).order("id", { ascending: true }).limit(100);
+      if (typeof resetAt === "string" && resetAt) eventsQuery = eventsQuery.gt("created_at", resetAt);
+      const { data, error } = await eventsQuery;
       if (error) throw error;
-      return reply({ ok: true, events: data || [] });
+      return reply({ ok: true, events: data || [], reset_at: resetAt || null });
     }
 
     if (action === "get-shared-inventory" || action === "save-shared-inventory" || action === "admin-save-shared-inventory") {
@@ -420,11 +428,22 @@ Deno.serve(async (req) => {
         const tx = syncEvent.transaction;
         const hist = syncEvent.history;
         if (tx.id && hist.id) {
-          const { error: eventError } = await adminDb.from("vds_sync_events").insert({
-            site,
-            event_payload: { transaction: tx, history: hist },
-          });
-          if (eventError) throw eventError;
+          // save-state may be called by a tab that had a transaction event in
+          // flight while Admin performed a reset. The SQL merge protects the
+          // app_state arrays, but the event stream must apply the same fence.
+          const { data: latestState, error: latestStateError } = await adminDb.from("app_state")
+            .select("payload").eq("site", site).maybeSingle();
+          if (latestStateError) throw latestStateError;
+          const resetAt = Date.parse(String(latestState?.payload?._testing_reset_at || ""));
+          const eventAt = Date.parse(String(tx.updatedAt || hist.timestamp || ""));
+          const isAfterReset = !Number.isFinite(resetAt) || (Number.isFinite(eventAt) && eventAt > resetAt);
+          if (isAfterReset) {
+            const { error: eventError } = await adminDb.from("vds_sync_events").insert({
+              site,
+              event_payload: { transaction: tx, history: hist },
+            });
+            if (eventError) throw eventError;
+          }
         }
       }
       return reply({ ok: true });

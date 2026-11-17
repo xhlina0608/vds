@@ -131,6 +131,10 @@ function vdsMergeRealtimeEvent(row){
  const payload=row&&row.event_payload;if(!payload||!state||row.site!==currentSite)return;
  if(row.id!==undefined&&row.id!==null){const eventId=String(row.id);if(vdsSeenSyncEventIds.has(eventId))return;vdsSeenSyncEventIds.add(eventId);if(vdsSeenSyncEventIds.size>2000){const keep=[...vdsSeenSyncEventIds].slice(-1000);vdsSeenSyncEventIds.clear();keep.forEach(x=>vdsSeenSyncEventIds.add(x));}}
  const tx=payload.transaction, hist=payload.history; if(!tx||!tx.id)return;
+ // Ignore delayed/replayed events that predate the last Admin testing reset.
+ const resetAt=Date.parse(String(state._testing_reset_at||''));
+ const eventAt=Date.parse(String(tx.updatedAt||hist?.timestamp||''));
+ if(Number.isFinite(resetAt)&&(!Number.isFinite(eventAt)||eventAt<=resetAt))return;
  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
  const i=state.transactions.findIndex(x=>String(x.id)===String(tx.id));
  if(i<0)state.transactions.push(tx);else if(String(state.transactions[i].updatedAt||'')<String(tx.updatedAt||''))state.transactions[i]=tx;
@@ -1518,6 +1522,9 @@ async function clearTestingData(){
    results.push(site==='dana'?'Dana Paramita':'Bidding');
   }
   vdsSaveAgain=false;clearTimeout(vdsSaveTimer);
+  // Drop any queued local event IDs; backend now filters the event stream by reset timestamp.
+  vdsSeenSyncEventIds.clear();
+  vdsSyncEventCursor.bidding=0;vdsSyncEventCursor.dana=0;
   render();
   alert('Berhasil. Data testing Bidding dan Dana Paramita sudah kosong dan diverifikasi dari Supabase.');
  }catch(e){
