@@ -1,11 +1,1 @@
-1) Extract ZIP.
-2) GitHub: replace index.html pada root repository, lalu Commit.
-3) Supabase: replace supabase/functions/vds-api/index.ts, lalu deploy ulang Edge Function vds-api.
-4) Tunggu Vercel dan Supabase selesai deploy.
-5) Buka vds.onesolution.my.id, refresh paksa (Ctrl+Shift+R), lalu login.
-6) Menu "Tambah & Retur Barang" muncul di Website Bidding dan Dana Paramita.
-7) Coba tambah barang uji, lalu pindah website. Pastikan barang yang sama terlihat.
-8) Saat retur, isi jumlah sisa setelah bidding terlebih dahulu, lalu jumlah yang akan diretur. Jumlah retur tidak boleh melebihi sisa tersebut.
-9) Gunakan nama TEST untuk uji coba; fitur hapus barang belum disediakan.
-
-Tidak perlu SQL migration.
+Extract ZIP, replace index.html in the ROOT GitHub repository, commit/push, wait for Vercel deployment, then hard refresh the website (Ctrl+Shift+R). For this UI update, do not run SQL migration and do not redeploy vds-api if the prior shared inventory function is already installed.
