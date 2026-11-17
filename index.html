@@ -314,35 +314,39 @@ function inventoryPage(){
  const catalog=Array.isArray(state.prices)?state.prices:[];
  const fmt=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
  const addOptions=catalog.map((p,i)=>`<option value="${i}">${esc(p.name)}${Number(p.price||0)>0?' — '+fmt(p.price):''}</option>`).join('');
+ // Retur harus menampilkan seluruh katalog, bukan hanya stok yang sudah tercatat.
+ // Barang yang belum pernah dimasukkan melalui form Tambah tetap dapat dipilih.
  const returnOptions=catalog.map((p,i)=>{
-  const inv=products.find(x=>String(x.name||'').toLowerCase()===String(p.name||'').toLowerCase()&&Number(x.availableQty||0)>0);
-  return inv?`<option value="${esc(inv.id)}">${esc(p.name)} — tersedia ${Number(inv.availableQty||0)}</option>`:'';
+  const inv=products.find(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());
+  const available=inv?Number(inv.availableQty||0):0;
+  return `<option value="${i}">${esc(p.name)}${available>0?' — tersedia '+available:' — stok belum tercatat'}</option>`;
  }).join('');
  return `<div class="cards"><div class="card"><small>Jenis Barang</small><strong>${products.length}</strong></div><div class="card"><small>Total Stok Tersedia</small><strong>${products.reduce((n,x)=>n+Number(x.availableQty||0),0)}</strong></div><div class="card"><small>Total Retur</small><strong>${returns.length}</strong></div><div class="card"><small>Jumlah Diretur</small><strong>${returns.reduce((n,x)=>n+Number(x.qty||0),0)}</strong></div></div>
- <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Barang dipilih dari Daftar Harga & Item. Data stok dan retur tersimpan terpisah sesuai website yang sedang dibuka.</small></div><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div>
+ <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Barang dipilih dari Daftar Harga & Item. Data tersimpan di cloud dan tampil di kedua website.</small></div><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div>
  <div class="formgrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invAddProduct" onchange="syncInventoryProductPrice()"><option value="">Pilih barang</option>${addOptions}</select></div><div class="field" style="margin-top:10px"><label>Harga Daftar</label><input id="invAddPrice" readonly placeholder="Otomatis dari Daftar Harga & Item"></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy||!catalog.length?'disabled':''}>Simpan Barang</button></div>
- <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang tersedia</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Isi jumlah barang yang benar-benar tersisa setelah kegiatan.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Alasan Retur</label><select id="invReturnReason"><option value="Barang sisa / tidak terjual">Barang sisa / tidak terjual</option><option value="Barang rusak">Barang rusak</option><option value="Dikembalikan ke pemasok">Dikembalikan ke pemasok</option><option value="Lainnya">Lainnya</option></select></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!returnOptions||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
+ <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Isi jumlah barang yang benar-benar tersisa setelah kegiatan.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Alasan Retur</label><select id="invReturnReason"><option value="Barang sisa / tidak terjual">Barang sisa / tidak terjual</option><option value="Barang rusak">Barang rusak</option><option value="Dikembalikan ke pemasok">Dikembalikan ke pemasok</option><option value="Lainnya">Lainnya</option></select></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!catalog.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Jumlah tersedia berkurang otomatis saat barang diretur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Harga Daftar</th><th>Jumlah Masuk</th><th>Sudah Diretur</th><th>Tersedia</th><th>Keterangan</th></tr></thead><tbody>${products.length?products.map((x,i)=>{const p=catalog.find(p=>String(p.name||'').toLowerCase()===String(x.name||'').toLowerCase());return `<tr><td>${i+1}</td><td><b>${esc(x.name)}</b></td><td>${fmt(p?.price||x.price||0)}</td><td>${Number(x.totalQty||0)}</td><td>${Number(x.returnedQty||0)}</td><td><b>${Number(x.availableQty||0)}</b></td><td>${esc(x.notes||'-')}</td></tr>`}).join(''):'<tr><td colspan="7" class="empty">Belum ada barang. Pilih barang dari Daftar Harga & Item.</td></tr>'}</tbody></table></div></div>
- <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur untuk website ini saja.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Alasan</th><th>Petugas</th><th>Website</th><th>Keterangan</th></tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.reason||'-')}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada riwayat retur.</td></tr>'}</tbody></table></div></div>`;
+ <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur dari kedua website.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Alasan</th><th>Petugas</th><th>Website</th><th>Keterangan</th></tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.reason||'-')}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada riwayat retur.</td></tr>'}</tbody></table></div></div>`;
 }
 function syncInventoryProductPrice(){
  const select=document.getElementById('invAddProduct');const field=document.getElementById('invAddPrice');
  if(!select||!field)return;const product=state.prices?.[Number(select.value)];field.value=product?'Rp '+Number(product.price||0).toLocaleString('id-ID'):'';
 }
 function syncInventoryRemaining(){
- const id=document.getElementById('invReturnItem')?.value||'';
- const item=(sharedInventory.items||[]).find(x=>x.id===id);
+ const index=document.getElementById('invReturnItem')?.value??'';
+ const product=index===''?null:state.prices?.[Number(index)];
+ const item=product?(sharedInventory.items||[]).find(x=>String(x.name||'').trim().toLowerCase()===String(product.name||'').trim().toLowerCase()):null;
  const field=document.getElementById('invReturnRemaining');
- if(field)field.value=String(Number(item?.availableQty||0));
+ if(field)field.value=item?String(Number(item.availableQty||0)):'0';
 }
 async function refreshSharedInventory(){
- try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};render();vdsSyncNote('Data stok website ini berhasil diperbarui');}
+ try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};render();vdsSyncNote('Data barang bersama berhasil diperbarui');}
  catch(e){alert('Gagal memuat data barang: '+e.message);}
 }
 async function saveSharedInventory(next){
  if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan data barang…',0);
- try{const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Data stok website ini tersimpan di cloud');return true;}
+ try{const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Data barang tersimpan di cloud');return true;}
  catch(e){alert('Gagal menyimpan data barang: '+e.message);vdsSyncNote('Gagal menyimpan data barang',3000);return false;}
  finally{sharedInventoryBusy=false;}
 }
@@ -355,16 +359,39 @@ async function addInventoryItem(){
  const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];
  const existing=next.items.find(x=>String(x.name||'').toLowerCase()===name.toLowerCase());
  if(existing){existing.catalogNo=catalogNo;existing.name=name;existing.price=price;existing.totalQty=Number(existing.totalQty||0)+qty;existing.availableQty=Number(existing.availableQty||0)+qty;existing.notes=notes||existing.notes||'';existing.updatedAt=new Date().toISOString();}
- else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()});
+ else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()});
  if(await saveSharedInventory(next)){render();}
 }
 async function returnInventoryItem(){
  if(!(isAdmin()||hasPermission('inventory')||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}
- const id=document.getElementById('invReturnItem')?.value||'',remaining=Number(document.getElementById('invReturnRemaining')?.value||0),qty=Number(document.getElementById('invReturnQty')?.value||0),reason=document.getElementById('invReturnReason')?.value||'',notes=document.getElementById('invReturnNote')?.value.trim()||'';
- const next=JSON.parse(JSON.stringify(sharedInventory));const item=(next.items||[]).find(x=>x.id===id);
- if(!item){alert('Pilih barang yang akan diretur dari Daftar Harga & Item.');return;}if(!Number.isInteger(remaining)||remaining<0||remaining>Number(item.availableQty||0)){alert('Jumlah sisa harus 0 sampai '+Number(item.availableQty||0)+'.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah retur minimal 1.');return;}if(qty>remaining){alert('Jumlah retur tidak boleh melebihi sisa barang ('+remaining+').');return;}
- item.availableQty=remaining-qty;item.returnedQty=Number(item.returnedQty||0)+qty;
- next.returns=Array.isArray(next.returns)?next.returns:[];next.returns.push({id:'ret-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:item.id,itemName:item.name,catalogNo:item.catalogNo,qty,reason,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
+ const index=document.getElementById('invReturnItem')?.value??'';
+ const product=index===''?null:state.prices?.[Number(index)];
+ const remaining=Number(document.getElementById('invReturnRemaining')?.value||0);
+ const qty=Number(document.getElementById('invReturnQty')?.value||0);
+ const reason=document.getElementById('invReturnReason')?.value||'';
+ const notes=document.getElementById('invReturnNote')?.value.trim()||'';
+ if(!product){alert('Pilih barang dari Daftar Harga & Item.');return;}
+ if(!Number.isInteger(remaining)||remaining<0){alert('Isi jumlah sisa barang dengan angka 0 atau lebih.');return;}
+ if(!Number.isInteger(qty)||qty<1){alert('Jumlah retur minimal 1.');return;}
+ if(qty>remaining){alert('Jumlah retur tidak boleh melebihi sisa barang ('+remaining+').');return;}
+ const next=JSON.parse(JSON.stringify(sharedInventory));
+ next.items=Array.isArray(next.items)?next.items:[];
+ next.returns=Array.isArray(next.returns)?next.returns:[];
+ const name=String(product.name||'').trim();
+ const catalogNo=product.no??Number(index)+1;
+ let item=next.items.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
+ if(item){
+  if(remaining>Number(item.totalQty||0)){
+   alert('Jumlah sisa tidak boleh melebihi jumlah barang masuk ('+Number(item.totalQty||0)+').');return;
+  }
+  item.availableQty=remaining-qty;
+  item.returnedQty=Number(item.returnedQty||0)+qty;
+  item.updatedAt=new Date().toISOString();
+ }else{
+  item={id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price:Number(product.price||0),totalQty:remaining,returnedQty:qty,availableQty:remaining-qty,notes:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  next.items.push(item);
+ }
+ next.returns.push({id:'ret-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:item.id,itemName:item.name,catalogNo:item.catalogNo,qty,reason,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
  if(await saveSharedInventory(next)){render();}
 }
 function transactionSortValue(value){const digits=String(value??'').replace(/[^0-9]/g,'');return digits?Number(digits):Number.MAX_SAFE_INTEGER;}
