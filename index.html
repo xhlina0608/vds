@@ -1560,7 +1560,7 @@ function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
  <div class="tablewrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Hak Akses</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>
- ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'?'':`<button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button>`}</td></tr>`).join('')}
+ ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'||a.role==='admin'?'':`<button class="soft" onclick="editAccountUsername(${i})">Edit Username</button> <button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button> <button class="danger" onclick="deleteAccount(${i})">Hapus User</button>`}</td></tr>`).join('')}
  </tbody></table></div><div class="note" style="margin-top:14px">Semua izin User secara default NONAKTIF. Centang hanya fitur yang boleh digunakan oleh akun tersebut. Admin selalu memiliki akses penuh.</div></div>`;
 }
 function showAddAccount(){
@@ -1575,6 +1575,31 @@ function editAccountPermissions(i){
  const a=accounts[i];document.getElementById('modalTitle').textContent='Atur Izin Fitur — '+a.username;
  document.getElementById('modalBody').innerHTML=`<p>Pilih fitur yang boleh diakses oleh akun <b>${esc(a.username)}</b>. Fitur yang tidak dicentang akan ditolak.</p>${accountPermissionsMarkup(a.permissions||{})}<div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveAccountPermissions(${i})">Simpan Izin</button></div>`;
  document.getElementById('modal').classList.add('show');
+}
+async function editAccountUsername(i){
+ if(!isAdmin()||!accounts[i]||accounts[i].role==='admin'||accounts[i].username.toLowerCase()==='septino')return;
+ const a=accounts[i];
+ const next=prompt('Username baru untuk akun '+a.username+' (3–24 karakter, huruf/angka/titik/_/-):',a.username);
+ if(next===null)return;
+ const username=next.trim().toLowerCase();
+ if(!/^[a-zA-Z0-9._-]{3,24}$/.test(username)){alert('Username harus 3–24 karakter.');return;}
+ if(username===a.username.toLowerCase()){alert('Username tidak berubah.');return;}
+ if(accounts.some((x,j)=>j!==i&&x.username.toLowerCase()===username)){alert('Username sudah digunakan.');return;}
+ if(!confirm('Ubah username '+a.username+' menjadi '+username+'? User harus login berikutnya menggunakan username baru dan password yang sama.'))return;
+ try{await vdsApi('update-user',{id:a.id,username});await vdsLoadUsers();render();alert('Username berhasil diubah menjadi '+username+'. Password dan hak akses tetap sama.');}
+ catch(e){alert('Gagal mengubah username: '+e.message);}
+}
+async function deleteAccount(i){
+ if(!isAdmin()||!accounts[i])return;
+ const a=accounts[i];
+ if(a.role==='admin'||a.username.toLowerCase()==='septino'||a.username.toLowerCase()===currentUser.toLowerCase()){
+  alert('Akun Admin dan akun yang sedang digunakan tidak dapat dihapus dari menu ini.');return;
+ }
+ const confirmation=prompt('Hapus akun '+a.username+' secara permanen? Tindakan ini tidak dapat dibatalkan.\n\nKetik HAPUS '+a.username+' untuk melanjutkan:');
+ if(confirmation===null)return;
+ if(confirmation.trim()!=='HAPUS '+a.username){alert('Konfirmasi tidak cocok. Akun tidak dihapus.');return;}
+ try{await vdsApi('delete-user',{id:a.id});accounts=accounts.filter((x)=>x.id!==a.id);render();alert('Akun '+a.username+' berhasil dihapus.');}
+ catch(e){alert('Gagal menghapus akun: '+e.message);}
 }
 async function saveAccountPermissions(i){
  if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;

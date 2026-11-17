@@ -151,15 +151,47 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update-user") {
-      await requireAdmin(req);
+      const actor = await requireAdmin(req);
       const id = String(body.id || "");
       const updates: any = {};
+      if (!id) return reply({ error: "User ID wajib diisi." }, 400);
       if (typeof body.active === "boolean") updates.active = body.active;
       if (body.permissions && typeof body.permissions === "object") updates.permissions = body.permissions;
-      if (!id) return reply({ error: "User ID wajib diisi." }, 400);
-      const { error } = await adminDb.from("profiles").update(updates).eq("id", id);
-      if (error) throw error;
+      if (body.username !== undefined) {
+        const username = String(body.username || "").trim().toLowerCase();
+        if (!validUsername(username)) return reply({ error: "Username harus 3–24 karakter: huruf, angka, titik, _ atau -." }, 400);
+        if (id === actor.user.id || username === "septino") return reply({ error: "Username akun Admin utama atau akun yang sedang digunakan tidak dapat diubah dari menu ini." }, 403);
+        const { data: target, error: targetErr } = await adminDb.from("profiles").select("id,username,role").eq("id", id).single();
+        if (targetErr || !target) return reply({ error: "Akun tidak ditemukan." }, 404);
+        if (String(target.role).toLowerCase() === "admin") return reply({ error: "Username akun Admin tidak dapat diubah dari menu User." }, 403);
+        const { data: duplicate, error: dupErr } = await adminDb.from("profiles").select("id").eq("username", username).neq("id", id).limit(1);
+        if (dupErr) throw dupErr;
+        if (duplicate?.length) return reply({ error: "Username sudah digunakan." }, 409);
+        const { error: authErr } = await adminDb.auth.admin.updateUserById(id, {
+          email: internalEmail(username), user_metadata: { username }, email_confirm: true,
+        });
+        if (authErr) throw authErr;
+        updates.username = username;
+      }
+      if (Object.keys(updates).length) {
+        const { error } = await adminDb.from("profiles").update(updates).eq("id", id);
+        if (error) throw error;
+      }
       return reply({ ok: true });
+    }
+
+    if (action === "delete-user") {
+      const actor = await requireAdmin(req);
+      const id = String(body.id || "");
+      if (!id) return reply({ error: "User ID wajib diisi." }, 400);
+      if (id === actor.user.id) return reply({ error: "Anda tidak dapat menghapus akun yang sedang digunakan." }, 403);
+      const { data: target, error: targetErr } = await adminDb.from("profiles").select("id,username,role").eq("id", id).single();
+      if (targetErr || !target) return reply({ error: "Akun tidak ditemukan." }, 404);
+      if (String(target.username || "").toLowerCase() === "septino" || String(target.role || "").toLowerCase() === "admin")
+        return reply({ error: "Akun Admin dilindungi dan tidak dapat dihapus dari menu ini." }, 403);
+      const { error } = await adminDb.auth.admin.deleteUser(id);
+      if (error) throw error;
+      return reply({ ok: true, deleted_username: target.username });
     }
 
     if (action === "reset-password") {
@@ -203,7 +235,7 @@ Deno.serve(async (req) => {
       return reply({ ok: true, events: data || [] });
     }
 
-    if (action === "get-shared-inventory" || action === "save-shared-inventory") {
+    if (action === "get-shared-inventory" || action === "save-shared-inventory" || action === "admin-save-shared-inventory") {
       const site = normalizeSite(body);
       if (site !== "bidding" && site !== "dana")
         return reply({ error: "Fitur stok hanya tersedia untuk Website Bidding dan Dana Paramita." }, 400);
@@ -218,17 +250,22 @@ Deno.serve(async (req) => {
         if (error) throw error;
         const inventory = data?.event_payload?.inventory;
         return reply({ ok: true, inventory: inventory && typeof inventory === "object"
-          ? inventory : { items: [], returns: [] } });
+          ? inventory : { items: [], returns: [], additions: [] } });
       }
       const actor = await getActor(req);
+      if (action === "admin-save-shared-inventory" && String(actor.profile?.role || "").toLowerCase() !== "admin")
+        return reply({ error: "Hanya Admin yang dapat mengedit atau menghapus riwayat barang." }, 403);
       const incoming = body.inventory;
       if (!incoming || typeof incoming !== "object" || !Array.isArray(incoming.items) || !Array.isArray(incoming.returns))
         return reply({ error: "Format data barang tidak valid." }, 400);
       if (incoming.items.length > 5000 || incoming.returns.length > 20000)
         return reply({ error: "Jumlah data barang melebihi batas." }, 400);
+      const additions = Array.isArray(incoming.additions) ? incoming.additions : [];
+      if (additions.length > 20000) return reply({ error: "Jumlah riwayat barang masuk melebihi batas." }, 400);
       const cleanInventory = {
         items: incoming.items.map((item: any) => ({ ...item, site })),
         returns: incoming.returns.map((item: any) => ({ ...item, site })),
+        additions: additions.map((item: any) => ({ ...item, site })),
         updated_at: new Date().toISOString(),
         updated_by: String(actor.profile.username || ""),
         site
@@ -239,6 +276,63 @@ Deno.serve(async (req) => {
       });
       if (error) throw error;
       return reply({ ok: true, inventory: cleanInventory });
+    }
+
+    if (action === "admin-clear-all-operational-data") {
+      const site = normalizeSite(body);
+      if (site !== "bidding" && site !== "dana")
+        return reply({ error: "Website tidak valid." }, 400);
+      await requireSiteAccess(req, site);
+      const actor = await getActor(req);
+      if (String(actor.profile?.role || "").toLowerCase() !== "admin")
+        return reply({ error: "Hanya Admin yang dapat menghapus seluruh data operasional." }, 403);
+
+      const { data: current, error: readError } = await adminDb.from("app_state")
+        .select("payload").eq("site", site).maybeSingle();
+      if (readError) throw readError;
+      if (!current?.payload || typeof current.payload !== "object")
+        return reply({ error: "Data website tidak ditemukan; penghapusan dibatalkan." }, 404);
+
+      // Preserve every unrelated setting/configuration field; clear only known operational datasets.
+      const payload: Record<string, any> = { ...current.payload };
+      for (const key of ["prices", "items", "transactions", "history", "sponsors"]) {
+        if (Array.isArray(payload[key])) payload[key] = [];
+      }
+      if (Array.isArray(payload.rincian)) {
+        payload.rincian = payload.rincian.map((row: any) =>
+          row && typeof row === "object" ? { ...row, value: 0 } : row
+        );
+      }
+
+      const { error: saveError } = await adminDb.from("app_state").upsert({
+        site,
+        payload,
+        updated_by: actor.user.id,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "site" });
+      if (saveError) throw saveError;
+
+      // This table contains both transaction sync events and inventory snapshots.
+      // Remove the old operational event stream so a newly opened browser cannot replay old bids.
+      const { error: eventsDeleteError } = await adminDb.from("vds_sync_events")
+        .delete().eq("site", site);
+      if (eventsDeleteError) throw eventsDeleteError;
+
+      // Inventory is stored as append-only snapshots in vds_sync_events.
+      // Write one empty snapshot so the latest state contains no stock or inventory history.
+      const emptyInventory = {
+        items: [], returns: [], additions: [],
+        updated_at: new Date().toISOString(),
+        updated_by: String(actor.profile.username || ""),
+        site
+      };
+      const { error: inventoryError } = await adminDb.from("vds_sync_events").insert({
+        site,
+        event_payload: { kind: "site_inventory_snapshot", site, inventory: emptyInventory }
+      });
+      if (inventoryError) throw inventoryError;
+
+      return reply({ ok: true, site, message: "Seluruh data operasional dihapus; pengaturan dan akun dipertahankan." });
     }
 
     if (action === "get-state" || action === "save-state") {

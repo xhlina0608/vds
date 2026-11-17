@@ -1,0 +1,35 @@
+PAKET UPDATE MANAJEMEN AKUN VDS
+================================
+
+Paket ini menyiapkan dua file yang harus diperbarui agar tombol Edit Username
+dan Hapus User muncul dan bekerja.
+
+1. VERCEL / GITHUB
+   - Ambil file index.html di folder paling atas ZIP ini.
+   - Ganti file index.html yang berada di ROOT repository GitHub.
+   - Commit/push perubahan dan tunggu deployment Vercel berstatus Ready.
+
+2. SUPABASE EDGE FUNCTION
+   - Buka Supabase Dashboard > Edge Functions > vds-api.
+   - Buka Code, ganti seluruh isi index.ts dengan file:
+     supabase/functions/vds-api/index.ts
+   - Deploy function vds-api.
+
+3. Setelah keduanya selesai
+   - Buka website VDS.
+   - Tekan Ctrl + Shift + R (hard refresh).
+   - Buka Manajemen Akun sebagai Admin.
+
+HASIL YANG DIHARAPKAN
+- Untuk akun USER: Ganti Password, Edit Username, Atur Izin,
+  Aktifkan/Nonaktifkan, dan Hapus User.
+- Akun Admin dan admin utama septino dilindungi dari penghapusan.
+- Username akun Admin tidak dapat diubah dari menu User.
+- Hapus User meminta konfirmasi mengetik: HAPUS <username>.
+
+CATATAN
+File sumber yang diberikan sudah berisi UI Edit Username/Hapus User dan
+handler backend update-user/delete-user. Jadi masalah tombol yang belum
+muncul biasanya karena file frontend root index.html yang sedang dipakai
+Vercel belum diganti dengan versi ini. Backend tetap perlu di-deploy agar
+aksi edit/hapus dapat dijalankan.
