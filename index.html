@@ -319,6 +319,7 @@ function inventoryCatalogProgress(product){
 function inventoryPage(){
  const products=Array.isArray(sharedInventory.items)?sharedInventory.items:[];
  const returns=Array.isArray(sharedInventory.returns)?sharedInventory.returns:[];
+ const additions=Array.isArray(sharedInventory.additions)?sharedInventory.additions:[];
  const catalog=Array.isArray(state.prices)?state.prices:[];
  const fmt=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
  const addOptions=catalog.map((p,i)=>`<option value="${i}">${esc(p.name)}${Number(p.price||0)>0?' — '+fmt(p.price):''}</option>`).join('');
@@ -334,6 +335,7 @@ function inventoryPage(){
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invAddProduct"><option value="">Pilih barang</option>${addOptions}</select></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy||!catalog.length?'disabled':''}>Simpan Barang</button></div>
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Otomatis mengikuti sisa stok pada Daftar Harga & Item. Sesuaikan jika hasil hitung fisik berbeda.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!catalog.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Stok tersedia mengikuti sisa stok Daftar Harga & Item dan berkurang otomatis saat retur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Jumlah Stok</th><th>Sudah Diretur</th><th>Tersedia</th><th>Keterangan</th></tr></thead><tbody>${catalog.length?catalog.map((p,i)=>{const stock=inventoryCatalogProgress(p);const inv=products.find(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());const returned=returns.filter(x=>String(x.itemName||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase()).reduce((n,x)=>n+Number(x.qty||0),0);return `<tr><td>${i+1}</td><td><b>${esc(p.name)}</b></td><td>${stock.stock}</td><td>${returned}</td><td><b>${stock.remain}</b></td><td>${esc(inv?.notes||'-')}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">Belum ada barang di Daftar Harga & Item.</td></tr>'}</tbody></table></div></div>
+ <div class="panel" id="inventory-additions-history"><div class="panelhead"><div><h3>Riwayat Barang Masuk</h3><small>Hanya transaksi tambah barang yang benar-benar dicatat. Stok awal tidak dimasukkan sebagai barang masuk.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${additions.length?[...additions].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryAddition('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryAddition('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat barang masuk.</td></tr>`}</tbody></table></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur untuk website ini saja. Edit dan hapus hanya tersedia untuk Admin.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryReturn('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryReturn('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat retur.</td></tr>`}</tbody></table></div></div>`;
 }
 function inventoryPdfEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -442,6 +444,59 @@ function recalculateInventorySummary(next, itemName){
  const returned=related.reduce((sum,x)=>sum+Number(x.qty||0),0);
  if(inv){inv.returnedQty=returned;inv.availableQty=Math.max(0,Number(inv.totalQty||0)-returned);inv.updatedAt=new Date().toISOString();}
 }
+function editInventoryAddition(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengedit data barang masuk.');return;}
+ const record=(sharedInventory.additions||[]).find(x=>String(x.id)===String(id));if(!record)return;
+ const catalog=state.prices||[];
+ const options=catalog.map((p,i)=>`<option value="${i}" ${String(p.name||'').trim().toLowerCase()===String(record.itemName||'').trim().toLowerCase()?'selected':''}>${esc(p.name)}</option>`).join('');
+ document.getElementById('modalTitle').textContent='Edit Riwayat Barang Masuk';
+ document.getElementById('modalBody').innerHTML=`<div class="field"><label>Nama Barang</label><select id="editAdditionProduct">${options}</select></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="editAdditionQty" type="number" min="1" step="1" value="${Number(record.qty||1)}"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="editAdditionNotes" value="${esc(record.notes||'')}" placeholder="Opsional"></div><div class="toolbar" style="justify-content:flex-end;margin-top:16px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveInventoryAdditionEdit('${esc(record.id)}')">Simpan Perubahan</button></div>`;
+ document.getElementById('modal').classList.add('show');
+}
+async function saveInventoryAdditionEdit(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengedit data barang masuk.');return;}
+ if(sharedInventoryBusy)return;
+ const original=(sharedInventory.additions||[]).find(x=>String(x.id)===String(id));if(!original)return;
+ const newIndex=Number(document.getElementById('editAdditionProduct')?.value),newProduct=state.prices?.[newIndex];
+ const qty=Number(document.getElementById('editAdditionQty')?.value),notes=document.getElementById('editAdditionNotes')?.value.trim()||'';
+ if(!newProduct){alert('Pilih barang yang valid.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah masuk minimal 1.');return;}
+ const oldName=String(original.itemName||'').trim(),newName=String(newProduct.name||'').trim(),oldQty=Number(original.qty||0),same=oldName.toLowerCase()===newName.toLowerCase();
+ const oldProduct=(state.prices||[]).find(p=>String(p.name||'').trim().toLowerCase()===oldName.toLowerCase());
+ if(!oldProduct){alert('Barang lama tidak ditemukan di Daftar Harga & Item. Perubahan dibatalkan agar stok tidak salah.');return;}
+ const oldRemain=inventoryCatalogProgress(oldProduct).remain;
+ const reduction=same?Math.max(0,oldQty-qty):oldQty;
+ if(reduction>oldRemain){alert('Jumlah yang dikurangi melebihi stok tersedia. Barang yang sudah terpakai atau diretur tidak dapat dihapus dari riwayat.');return;}
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];next.additions=Array.isArray(next.additions)?next.additions:[];
+ const record=next.additions.find(x=>String(x.id)===String(id));if(!record)return;
+ const oldSummary=next.items.find(x=>String(x.name||'').trim().toLowerCase()===oldName.toLowerCase());
+ if(oldSummary){oldSummary.totalQty=Math.max(0,Number(oldSummary.totalQty||0)-(same?oldQty-qty:oldQty));oldSummary.updatedAt=new Date().toISOString();}
+ if(!same){
+  let newSummary=next.items.find(x=>String(x.name||'').trim().toLowerCase()===newName.toLowerCase());
+  if(!newSummary){newSummary={id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo:newProduct.no??newIndex+1,name:newName,price:Number(newProduct.price||0),totalQty:0,returnedQty:0,availableQty:0,notes:'',createdAt:new Date().toISOString()};next.items.push(newSummary);}
+  newSummary.totalQty=Number(newSummary.totalQty||0)+qty;newSummary.updatedAt=new Date().toISOString();
+ }
+ record.itemName=newName;record.catalogNo=newProduct.no??newIndex+1;record.qty=qty;record.notes=notes;record.itemId=(next.items.find(x=>String(x.name||'').trim().toLowerCase()===newName.toLowerCase())||{}).id||record.itemId;record.updatedAt=new Date().toISOString();record.updatedBy=currentUser;
+ recalculateInventorySummary(next,oldName);recalculateInventorySummary(next,newName);
+ if(!await saveSharedInventoryAdmin(next))return;
+ if(same)applyInventoryReturnStockDelta(oldName,qty-oldQty);else{applyInventoryReturnStockDelta(oldName,-oldQty);applyInventoryReturnStockDelta(newName,qty);}
+ persist();closeModal();render();vdsSyncNote('Riwayat barang masuk diperbarui dan stok disesuaikan');
+}
+async function deleteInventoryAddition(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data barang masuk.');return;}
+ const record=(sharedInventory.additions||[]).find(x=>String(x.id)===String(id));if(!record)return;
+ const product=(state.prices||[]).find(p=>String(p.name||'').trim().toLowerCase()===String(record.itemName||'').trim().toLowerCase());
+ if(!product){alert('Barang tidak ditemukan di Daftar Harga & Item. Penghapusan dibatalkan.');return;}
+ const qty=Number(record.qty||0),remain=inventoryCatalogProgress(product).remain;
+ if(qty>remain){alert('Barang masuk ini sudah sebagian/seluruhnya terpakai atau diretur. Riwayat tidak dapat dihapus agar stok tidak menjadi selisih.');return;}
+ if(!confirm('Hapus riwayat barang masuk '+(record.itemName||'')+' sebanyak '+qty+'? Stok akan dikurangi otomatis.'))return;
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.additions=(next.additions||[]).filter(x=>String(x.id)!==String(id));
+ const summary=(next.items||[]).find(x=>String(x.name||'').trim().toLowerCase()===String(record.itemName||'').trim().toLowerCase());
+ if(summary){summary.totalQty=Math.max(0,Number(summary.totalQty||0)-qty);summary.updatedAt=new Date().toISOString();}
+ recalculateInventorySummary(next,record.itemName);
+ if(!await saveSharedInventoryAdmin(next))return;
+ applyInventoryReturnStockDelta(record.itemName,-qty);persist();render();vdsSyncNote('Riwayat barang masuk dihapus dan stok dikurangi');
+}
+
 function editInventoryReturn(id){
  if(!isAdmin()){alert('Hanya Admin yang dapat mengedit data retur.');return;}
  const record=(sharedInventory.returns||[]).find(x=>String(x.id)===String(id));if(!record)return;
@@ -481,10 +536,10 @@ async function deleteInventoryReturn(id){
  applyInventoryReturnStockDelta(record.itemName,Number(record.qty||0));persist();render();vdsSyncNote('Data retur dihapus dan stok dikembalikan');
 }
 async function saveSharedInventoryAdmin(next){
- if(!isAdmin()){alert('Hanya Admin yang dapat mengubah riwayat retur.');return false;}
- if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan perubahan retur…',0);
- try{next.returns=(next.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Perubahan retur tersimpan di cloud');return true;}
- catch(e){alert('Gagal menyimpan perubahan retur: '+e.message);vdsSyncNote('Gagal menyimpan perubahan retur',3000);return false;}
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengubah riwayat barang masuk atau retur.');return false;}
+ if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan perubahan riwayat barang…',0);
+ try{next.returns=(next.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});const out=await vdsApi('admin-save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Perubahan riwayat barang tersimpan di cloud');return true;}
+ catch(e){alert('Gagal menyimpan perubahan riwayat barang: '+e.message);vdsSyncNote('Gagal menyimpan perubahan riwayat barang',3000);return false;}
  finally{sharedInventoryBusy=false;}
 }
 
@@ -1519,7 +1574,19 @@ function go(p){
  render();
  if(p==='inventory')refreshSharedInventory();
 }
-function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory')c.innerHTML=inventoryPage();if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
+function ensureInventoryAdditionHistory(){
+ const c=document.getElementById('content');if(!c||currentPage!=='inventory')return;
+ const headings=[...c.querySelectorAll('h3')];
+ const existing=headings.find(h=>String(h.textContent||'').trim().toLowerCase()==='riwayat barang masuk');
+ if(existing){const panel=existing.closest('.panel');if(panel){panel.id='inventory-additions-history';panel.hidden=false;panel.style.display='block';}return;}
+ const additions=Array.isArray(sharedInventory?.additions)?sharedInventory.additions:[];
+ const rows=[...additions].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryAddition('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryAddition('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join('');
+ const panel=`<div class="panel" id="inventory-additions-history"><div class="panelhead"><div><h3>Riwayat Barang Masuk</h3><small>Riwayat transaksi tambah barang yang benar-benar dicatat. Stok awal tidak dimasukkan.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat barang masuk.</td></tr>`}</tbody></table></div></div>`;
+ const returnHeading=headings.find(h=>String(h.textContent||'').trim().toLowerCase()==='riwayat retur barang');
+ const returnPanel=returnHeading?.closest('.panel');
+ if(returnPanel)returnPanel.insertAdjacentHTML('beforebegin',panel);else c.insertAdjacentHTML('beforeend',panel);
+}
+function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory'){c.innerHTML=inventoryPage();ensureInventoryAdditionHistory();}if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
 // Restore the previous login on a new visit/reload. The saved access token is
 // validated against the cloud before the application is opened.
 async function vdsRestoreRememberedSession(){
