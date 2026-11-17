@@ -226,9 +226,12 @@ Deno.serve(async (req) => {
         return reply({ error: "Format data barang tidak valid." }, 400);
       if (incoming.items.length > 5000 || incoming.returns.length > 20000)
         return reply({ error: "Jumlah data barang melebihi batas." }, 400);
+      const additions = Array.isArray(incoming.additions) ? incoming.additions : [];
+      if (additions.length > 20000) return reply({ error: "Jumlah riwayat barang masuk melebihi batas." }, 400);
       const cleanInventory = {
         items: incoming.items.map((item: any) => ({ ...item, site })),
         returns: incoming.returns.map((item: any) => ({ ...item, site })),
+        additions: additions.map((item: any) => ({ ...item, site })),
         updated_at: new Date().toISOString(),
         updated_by: String(actor.profile.username || ""),
         site
