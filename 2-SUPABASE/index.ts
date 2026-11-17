@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
       return reply({ ok: true, events: data || [] });
     }
 
-    if (action === "get-shared-inventory" || action === "save-shared-inventory") {
+    if (action === "get-shared-inventory" || action === "save-shared-inventory" || action === "admin-save-shared-inventory") {
       const site = normalizeSite(body);
       if (site !== "bidding" && site !== "dana")
         return reply({ error: "Fitur stok hanya tersedia untuk Website Bidding dan Dana Paramita." }, 400);
@@ -218,9 +218,11 @@ Deno.serve(async (req) => {
         if (error) throw error;
         const inventory = data?.event_payload?.inventory;
         return reply({ ok: true, inventory: inventory && typeof inventory === "object"
-          ? inventory : { items: [], returns: [] } });
+          ? inventory : { items: [], returns: [], additions: [] } });
       }
       const actor = await getActor(req);
+      if (action === "admin-save-shared-inventory" && String(actor.profile?.role || "").toLowerCase() !== "admin")
+        return reply({ error: "Hanya Admin yang dapat mengedit atau menghapus riwayat barang." }, 403);
       const incoming = body.inventory;
       if (!incoming || typeof incoming !== "object" || !Array.isArray(incoming.items) || !Array.isArray(incoming.returns))
         return reply({ error: "Format data barang tidak valid." }, 400);
