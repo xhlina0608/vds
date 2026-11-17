@@ -335,7 +335,7 @@ function inventoryPage(){
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invAddProduct"><option value="">Pilih barang</option>${addOptions}</select></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy||!catalog.length?'disabled':''}>Simpan Barang</button></div>
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Otomatis mengikuti sisa stok pada Daftar Harga & Item. Sesuaikan jika hasil hitung fisik berbeda.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!catalog.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Stok tersedia mengikuti sisa stok Daftar Harga & Item dan berkurang otomatis saat retur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Jumlah Stok</th><th>Sudah Diretur</th><th>Tersedia</th><th>Keterangan</th></tr></thead><tbody>${catalog.length?catalog.map((p,i)=>{const stock=inventoryCatalogProgress(p);const inv=products.find(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());const returned=returns.filter(x=>String(x.itemName||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase()).reduce((n,x)=>n+Number(x.qty||0),0);return `<tr><td>${i+1}</td><td><b>${esc(p.name)}</b></td><td>${stock.stock}</td><td>${returned}</td><td><b>${stock.remain}</b></td><td>${esc(inv?.notes||'-')}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">Belum ada barang di Daftar Harga & Item.</td></tr>'}</tbody></table></div></div>
- <div class="panel"><div class="panelhead"><div><h3>Riwayat Barang Masuk</h3><small>Hanya transaksi tambah barang yang benar-benar dicatat. Stok awal tidak dimasukkan sebagai barang masuk.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${additions.length?[...additions].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryAddition('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryAddition('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat barang masuk.</td></tr>`}</tbody></table></div></div>
+ <div class="panel" id="inventory-additions-history"><div class="panelhead"><div><h3>Riwayat Barang Masuk</h3><small>Hanya transaksi tambah barang yang benar-benar dicatat. Stok awal tidak dimasukkan sebagai barang masuk.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${additions.length?[...additions].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryAddition('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryAddition('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat barang masuk.</td></tr>`}</tbody></table></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur untuk website ini saja. Edit dan hapus hanya tersedia untuk Admin.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryReturn('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryReturn('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat retur.</td></tr>`}</tbody></table></div></div>`;
 }
 function inventoryPdfEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1459,19 +1459,26 @@ function unpaid(){return state.transactions.filter(t=>!t.payment).reduce((s,t)=>
 function cleanupPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel">
-  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
-  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
-  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
-   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
-   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
-   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
-   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
-   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
+  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Kelola penghapusan data testing atau kosongkan seluruh data operasional tanpa menghapus pengaturan sistem.</small></div></div>
+  <div class="note" style="margin:12px 0">Gunakan <b>Hapus Data Testing</b> untuk membersihkan transaksi dan riwayat testing tetapi mempertahankan master barang. Gunakan <b>Hapus Semua Data</b> jika ingin memulai dari nol dengan tetap mempertahankan pengaturan nota, background, akun, hak akses, dan konfigurasi.</div>
+  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Hapus Data Testing</th><th>Hapus Semua Data</th></tr></thead><tbody>
+   <tr><td>Live Bidding / Live Laporan Dana</td><td>Dihapus</td><td>Dihapus</td></tr>
+   <tr><td>History Bidding</td><td>Dihapus</td><td>Dihapus</td></tr>
+   <tr><td>Daftar Harga &amp; Item</td><td><b>Tetap disimpan</b></td><td>Dihapus</td></tr>
+   <tr><td>Tambah &amp; Retur Barang</td><td><b>Tetap disimpan</b></td><td>Dihapus</td></tr>
+   <tr><td>Riwayat Barang Masuk &amp; Retur</td><td><b>Tetap disimpan</b></td><td>Dihapus</td></tr>
+   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td><td><b>Tetap disimpan</b></td></tr>
   </tbody></table></div>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
    <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
-   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
+   <span class="muted">Membersihkan transaksi testing dan mempertahankan master barang.</span>
   </div>
+  <div class="panel" style="margin-top:16px;border:1px solid #fecaca;background:#fffafa">
+   <div class="panelhead"><div><h3 style="color:#991b1b">Hapus Semua Data Operasional</h3><small>Penghapusan berlaku untuk website Bidding dan Dana Paramita.</small></div></div>
+   <div class="note" style="margin:8px 0 14px">Akan menghapus daftar harga &amp; item, seluruh data bidding/laporan dana, stok, tambah barang, retur, serta semua riwayat. Pengaturan nota, background, akun, hak akses, dan konfigurasi sistem tidak dihapus.</div>
+   <button class="danger" onclick="clearAllOperationalData()">HAPUS SEMUA DATA KECUALI PENGATURAN</button>
+  </div>
+  <div class="muted" style="margin-top:12px">Hanya Admin yang dapat menjalankan tindakan ini. Pastikan backup sudah tersedia sebelum penghapusan total.</div>
  </div>`;
 }
 function resetOperationalArrays(target){
@@ -1519,11 +1526,41 @@ async function clearTestingData(){
   if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
  }
 }
+async function clearAllOperationalData(){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus seluruh data.');return;}
+ const ok=confirm('PERINGATAN BESAR: Semua data operasional pada KEDUA website (Bidding dan Dana Paramita) akan dihapus, termasuk Daftar Harga & Item, Live Bidding, Laporan Dana, History, stok, barang masuk, retur, dan riwayatnya. HANYA pengaturan nota, background, akun, hak akses, dan konfigurasi sistem yang dipertahankan. Pastikan backup sudah tersedia. Lanjutkan?');
+ if(!ok)return;
+ const phrase=prompt('Untuk konfirmasi penghapusan total, ketik persis: HAPUS SEMUA DATA');
+ if(phrase!=='HAPUS SEMUA DATA'){alert('Penghapusan dibatalkan. Teks konfirmasi tidak sesuai.');return;}
+ const btn=document.querySelector('#content button[onclick="clearAllOperationalData()"]');
+ if(btn){btn.disabled=true;btn.textContent='Menghapus semua data…';}
+ try{
+  for(const site of ['bidding','dana']){
+   await vdsApi('admin-clear-all-operational-data',{site});
+  }
+  try{localStorage.removeItem('biddingViharaState');localStorage.removeItem('danaViharaState');}catch(e){}
+  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=false;vdsCloudLoaded.dana=false;}
+  if(currentSite==='bidding'||currentSite==='dana'){
+   const fresh=await vdsApi('get-state',{site:currentSite});
+   if(fresh&&fresh.state)state=fresh.state;
+   if(typeof vdsCloudLoaded==='object')vdsCloudLoaded[currentSite]=true;
+   await refreshSharedInventory();
+  }
+  render();
+  alert('Berhasil. Seluruh data operasional pada Bidding dan Dana Paramita sudah dihapus. Pengaturan nota, background, akun, hak akses, dan konfigurasi tetap dipertahankan. Muat ulang halaman di perangkat lain agar menampilkan data terbaru.');
+ }catch(e){
+  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud. Jika satu website sudah terhapus, jangan ulangi sebelum memeriksa kedua website.');
+  console.error(e);
+ }finally{
+  const b=document.querySelector('#content button[onclick="clearAllOperationalData()"]');
+  if(b){b.disabled=false;b.textContent='HAPUS SEMUA DATA KECUALI PENGATURAN';}
+ }
+}
 function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
  <div class="tablewrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Hak Akses</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>
- ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'?'':`<button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button>`}</td></tr>`).join('')}
+ ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'||a.role==='admin'?'':`<button class="soft" onclick="editAccountUsername(${i})">Edit Username</button> <button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button> <button class="danger" onclick="deleteAccount(${i})">Hapus User</button>`}</td></tr>`).join('')}
  </tbody></table></div><div class="note" style="margin-top:14px">Semua izin User secara default NONAKTIF. Centang hanya fitur yang boleh digunakan oleh akun tersebut. Admin selalu memiliki akses penuh.</div></div>`;
 }
 function showAddAccount(){
@@ -1538,6 +1575,31 @@ function editAccountPermissions(i){
  const a=accounts[i];document.getElementById('modalTitle').textContent='Atur Izin Fitur — '+a.username;
  document.getElementById('modalBody').innerHTML=`<p>Pilih fitur yang boleh diakses oleh akun <b>${esc(a.username)}</b>. Fitur yang tidak dicentang akan ditolak.</p>${accountPermissionsMarkup(a.permissions||{})}<div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveAccountPermissions(${i})">Simpan Izin</button></div>`;
  document.getElementById('modal').classList.add('show');
+}
+async function editAccountUsername(i){
+ if(!isAdmin()||!accounts[i]||accounts[i].role==='admin'||accounts[i].username.toLowerCase()==='septino')return;
+ const a=accounts[i];
+ const next=prompt('Username baru untuk akun '+a.username+' (3–24 karakter, huruf/angka/titik/_/-):',a.username);
+ if(next===null)return;
+ const username=next.trim().toLowerCase();
+ if(!/^[a-zA-Z0-9._-]{3,24}$/.test(username)){alert('Username harus 3–24 karakter.');return;}
+ if(username===a.username.toLowerCase()){alert('Username tidak berubah.');return;}
+ if(accounts.some((x,j)=>j!==i&&x.username.toLowerCase()===username)){alert('Username sudah digunakan.');return;}
+ if(!confirm('Ubah username '+a.username+' menjadi '+username+'? User harus login berikutnya menggunakan username baru dan password yang sama.'))return;
+ try{await vdsApi('update-user',{id:a.id,username});await vdsLoadUsers();render();alert('Username berhasil diubah menjadi '+username+'. Password dan hak akses tetap sama.');}
+ catch(e){alert('Gagal mengubah username: '+e.message);}
+}
+async function deleteAccount(i){
+ if(!isAdmin()||!accounts[i])return;
+ const a=accounts[i];
+ if(a.role==='admin'||a.username.toLowerCase()==='septino'||a.username.toLowerCase()===currentUser.toLowerCase()){
+  alert('Akun Admin dan akun yang sedang digunakan tidak dapat dihapus dari menu ini.');return;
+ }
+ const confirmation=prompt('Hapus akun '+a.username+' secara permanen? Tindakan ini tidak dapat dibatalkan.\n\nKetik HAPUS '+a.username+' untuk melanjutkan:');
+ if(confirmation===null)return;
+ if(confirmation.trim()!=='HAPUS '+a.username){alert('Konfirmasi tidak cocok. Akun tidak dihapus.');return;}
+ try{await vdsApi('delete-user',{id:a.id});accounts=accounts.filter((x)=>x.id!==a.id);render();alert('Akun '+a.username+' berhasil dihapus.');}
+ catch(e){alert('Gagal menghapus akun: '+e.message);}
 }
 async function saveAccountPermissions(i){
  if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
@@ -1574,7 +1636,19 @@ function go(p){
  render();
  if(p==='inventory')refreshSharedInventory();
 }
-function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory')c.innerHTML=inventoryPage();if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
+function ensureInventoryAdditionHistory(){
+ const c=document.getElementById('content');if(!c||currentPage!=='inventory')return;
+ const headings=[...c.querySelectorAll('h3')];
+ const existing=headings.find(h=>String(h.textContent||'').trim().toLowerCase()==='riwayat barang masuk');
+ if(existing){const panel=existing.closest('.panel');if(panel){panel.id='inventory-additions-history';panel.hidden=false;panel.style.display='block';}return;}
+ const additions=Array.isArray(sharedInventory?.additions)?sharedInventory.additions:[];
+ const rows=[...additions].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryAddition('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryAddition('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join('');
+ const panel=`<div class="panel" id="inventory-additions-history"><div class="panelhead"><div><h3>Riwayat Barang Masuk</h3><small>Riwayat transaksi tambah barang yang benar-benar dicatat. Stok awal tidak dimasukkan.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat barang masuk.</td></tr>`}</tbody></table></div></div>`;
+ const returnHeading=headings.find(h=>String(h.textContent||'').trim().toLowerCase()==='riwayat retur barang');
+ const returnPanel=returnHeading?.closest('.panel');
+ if(returnPanel)returnPanel.insertAdjacentHTML('beforebegin',panel);else c.insertAdjacentHTML('beforeend',panel);
+}
+function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory'){c.innerHTML=inventoryPage();ensureInventoryAdditionHistory();}if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
 // Restore the previous login on a new visit/reload. The saved access token is
 // validated against the cloud before the application is opened.
 async function vdsRestoreRememberedSession(){

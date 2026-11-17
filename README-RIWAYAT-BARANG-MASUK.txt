@@ -30,3 +30,21 @@ CATATAN
 - Data lama tetap aman. Riwayat masuk lama yang tidak pernah dicatat tidak dibuat-buat; saldo awal tidak dimasukkan sebagai transaksi.
 - 3-BACKUP adalah file cadangan historis, bukan file deploy.
 - Jangan upload file alternatif/backup ke root Vercel. Gunakan hanya 1-VERCEL/index.html.
+
+
+PATCH TAMBAHAN - RIWAYAT BARANG MASUK
+=====================================
+Perbaikan ini memastikan panel "Riwayat Barang Masuk" selalu dibuat saat halaman
+Tambah & Retur Barang dirender, apabila panel tersebut belum ada pada HTML yang
+sedang dipakai. Panel ditempatkan sebelum "Riwayat Retur Barang".
+
+Sumber data tetap menggunakan field additions pada shared inventory snapshot
+Supabase. Tidak ada perubahan skema database dan tidak memerlukan SQL migration.
+
+Deploy:
+1. Gunakan file 1-VERCEL/index.html untuk deployment frontend.
+2. Gunakan file 2-SUPABASE/index.ts hanya jika Edge Function belum memakai versi
+   yang sama dengan paket ini.
+3. Setelah deploy, buka masing-masing website dan tekan Ctrl+F5.
+4. Di halaman Tambah & Retur Barang, panel Riwayat Barang Masuk harus tampil
+   di antara Daftar Stok Barang dan Riwayat Retur Barang.
