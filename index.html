@@ -1419,7 +1419,7 @@ async function openSite(site, inNewTab=false){
  document.getElementById('sitePortal').style.display='none';document.getElementById('app').style.display='grid';
  const title=site==='dana'?'DANA PARAMITA':'BIDDING 2026';
  document.querySelector('.brand b').textContent=site==='dana'?'泰安廟 · DANA PARAMITA':'泰安廟 · BIDDING';
- document.querySelector('.brand small').textContent=site==='dana'?'Yayasan Vihara Dharma Shanti Kundur':'Yayasan Vihara Dharma Shanti Tanjung Batu';
+ document.querySelector('.brand small').textContent=site==='dana'?'Yayasan Vihara Dharma Shanti Tanjung Batu':'Yayasan Vihara Dharma Shanti Tanjung Batu';
  document.querySelector('.eyebrow').textContent=site==='dana'?'Sistem administrasi Dana Paramita':'Sistem administrasi bidding';
  document.getElementById('pageTitle').textContent=title;
  await vdsStartRealtime(site);
