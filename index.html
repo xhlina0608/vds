@@ -347,15 +347,8 @@ async function downloadInventoryPdf(kind){
  if(isIncoming){
   const additions=Array.isArray(sharedInventory.additions)?sharedInventory.additions:[];
   rows=additions.map(x=>({...x,qty:Number(x.qty||0)}));
-  // Older stock records predate per-transaction logs. Show any unlogged quantity
-  // as a clearly labelled opening balance rather than silently omitting it.
-  const loggedByName=new Map();
-  rows.forEach(x=>{const k=String(x.itemName||'').trim().toLowerCase();loggedByName.set(k,(loggedByName.get(k)||0)+Number(x.qty||0));});
-  (sharedInventory.items||[]).forEach(inv=>{
-   const name=String(inv.name||'').trim(),key=name.toLowerCase();
-   const legacyQty=Math.max(0,Number(inv.totalQty||0)-(loggedByName.get(key)||0));
-   if(legacyQty>0)rows.push({itemName:name,qty:legacyQty,date:inv.createdAt||'',createdAt:inv.createdAt||'',createdBy:'Saldo awal / riwayat lama',notes:inv.notes||'Transaksi sebelum pencatatan PDF diaktifkan'});
-  });
+  // PDF Barang Masuk hanya menampilkan transaksi tambah barang yang tercatat.
+  // Saldo awal/stok lama bukan transaksi barang masuk, jadi tidak dicetak.
  }else{
   rows=(Array.isArray(sharedInventory.returns)?sharedInventory.returns:[]).map(x=>({...x,qty:Number(x.qty||0)}));
  }
