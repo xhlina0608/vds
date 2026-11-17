@@ -205,14 +205,15 @@ Deno.serve(async (req) => {
 
     if (action === "get-shared-inventory" || action === "save-shared-inventory") {
       const site = normalizeSite(body);
+      if (site !== "bidding" && site !== "dana")
+        return reply({ error: "Fitur stok hanya tersedia untuk Website Bidding dan Dana Paramita." }, 400);
       await requireSiteAccess(req, site);
-      // Store snapshots in the existing sync-events table, not app_state.
-      // This keeps the inventory truly shared without touching either website's
-      // bidding/dana state or requiring a database migration.
+      // Inventory snapshots are isolated by website. Both sites use the same
+      // table, but each query and insert is scoped to its own site identifier.
       if (action === "get-shared-inventory") {
         const { data, error } = await adminDb.from("vds_sync_events")
-          .select("event_payload").eq("site", "bidding")
-          .contains("event_payload", { kind: "shared_inventory_snapshot" })
+          .select("event_payload").eq("site", site)
+          .contains("event_payload", { kind: "site_inventory_snapshot", site })
           .order("id", { ascending: false }).limit(1).maybeSingle();
         if (error) throw error;
         const inventory = data?.event_payload?.inventory;
@@ -226,14 +227,15 @@ Deno.serve(async (req) => {
       if (incoming.items.length > 5000 || incoming.returns.length > 20000)
         return reply({ error: "Jumlah data barang melebihi batas." }, 400);
       const cleanInventory = {
-        items: incoming.items,
-        returns: incoming.returns,
+        items: incoming.items.map((item: any) => ({ ...item, site })),
+        returns: incoming.returns.map((item: any) => ({ ...item, site })),
         updated_at: new Date().toISOString(),
-        updated_by: String(actor.profile.username || "")
+        updated_by: String(actor.profile.username || ""),
+        site
       };
       const { error } = await adminDb.from("vds_sync_events").insert({
-        site: "bidding",
-        event_payload: { kind: "shared_inventory_snapshot", inventory: cleanInventory }
+        site,
+        event_payload: { kind: "site_inventory_snapshot", site, inventory: cleanInventory }
       });
       if (error) throw error;
       return reply({ ok: true, inventory: cleanInventory });

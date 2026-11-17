@@ -1,1 +1,5 @@
-Extract ZIP, replace index.html in the ROOT GitHub repository, commit/push, wait for Vercel deployment, then hard refresh the website (Ctrl+Shift+R). For this UI update, do not run SQL migration and do not redeploy vds-api if the prior shared inventory function is already installed.
+1. Upload index.html dari paket ini ke root repository GitHub (replace file lama).
+2. Deploy ulang Supabase Edge Function vds-api memakai file supabase/functions/vds-api/index.ts dari paket ini.
+3. Tidak perlu SQL migration.
+4. Tunggu deploy Vercel dan Edge Function selesai, lalu hard refresh (Ctrl+Shift+R).
+Baca README.txt untuk catatan snapshot stok lama dan langkah pengujian.
