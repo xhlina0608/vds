@@ -399,7 +399,7 @@ async function addInventoryItem(){
  const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];next.additions=Array.isArray(next.additions)?next.additions:[];
  let inv=next.items.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
  if(inv){inv.catalogNo=catalogNo;inv.name=name;inv.price=price;inv.totalQty=Number(inv.totalQty||0)+qty;inv.availableQty=Number(inv.availableQty||0)+qty;inv.notes=notes||inv.notes||'';inv.updatedAt=new Date().toISOString();}
- else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()});
+ else {inv={id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()};next.items.push(inv);}
  next.additions.push({id:'add-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:inv.id,itemName:name,catalogNo,qty,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
  if(!await saveSharedInventory(next))return;
  const stock=inventoryCatalogProgress(product);const newStock=stock.stock+qty,newRemain=stock.remain+qty;
