@@ -103,9 +103,8 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <button data-page="invoice" onclick="go('invoice')"><span>▧</span>Nota / Invoice</button>
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
 <button data-page="prices" onclick="go('prices')"><span>◇</span>Daftar Harga &amp; Item</button>
+<button data-page="inventory" onclick="go('inventory')"><span>⇄</span>Tambah &amp; Retur Barang</button>
 <button data-page="details" onclick="go('details')"><span>∑</span>Rincian Dana</button>
-<button data-page="sponsorDonors" onclick="go('sponsorDonors')"><span>♥</span>Data Sponsor</button>
-<button data-page="sponsorGoods" onclick="go('sponsorGoods')"><span>▣</span>Data Sponsor Barang</button>
 <button data-page="cleanup" onclick="go('cleanup')" class="admin-only" style="display:none"><span>⌫</span>Bersihkan Data Testing</button>
 </nav><div class="userbox">LOGIN SEBAGAI <b id="who">Pengguna</b><button class="soft" style="margin-top:10px;width:100%" onclick="logout()">Keluar</button></div></aside>
 <main><header class="top"><div><div class="eyebrow">Sistem administrasi bidding</div><h1 id="pageTitle">Dashboard</h1></div><div class="actions no-print"><button class="soft" id="portalSwitchBtn" onclick="backToPortal()">Pilih Website</button><button class="soft" onclick="refreshCloud()">Refresh</button><button class="soft admin-only" onclick="exportExcel()">Export Excel</button><button class="soft admin-only" onclick="exportPDF()">Export PDF</button><button class="soft admin-only" id="backupBtn" onclick="exportBackup()">Backup Google Drive</button><button class="soft admin-only" id="restoreBtn" onclick="document.getElementById('restoreFile').click()">Restore Backup</button><input id="restoreFile" type="file" accept=".json,application/json" hidden onchange="restoreBackup(event)"></div></header>
@@ -215,13 +214,14 @@ const ACCOUNT_STORE_KEY='biddingViharaAccountsV1';
 let accounts=[];
 let currentUser='', currentRole='', currentPage='dashboard', selectedInvoice=null, currentProfile=null;
 function saveAccounts(){ /* akun cloud tidak disimpan di localStorage */ }
-function isAdmin(){return String(currentRole||'').toLowerCase()==='admin';}
+function isAdmin(){const roles=[currentRole,currentProfile?.role,currentProfile?.user_role,currentProfile?.account_role].map(x=>String(x||'').trim().toLowerCase());return roles.some(x=>['admin','administrator','superadmin','super_admin','owner'].includes(x))||currentProfile?.isAdmin===true||currentProfile?.is_admin===true;}
 const permissionCatalog=[
  {key:'siteBidding',label:'Akses Website Bidding'},
  {key:'siteDana',label:'Akses Website Dana Paramita'},
  {key:'dashboard',label:'Dashboard'},
  {key:'transactions',label:'Live Bidding'},
  {key:'prices',label:'Daftar Harga & Item (lihat, tambah, edit, hapus)'},
+ {key:'inventory',label:'Tambah & Retur Barang'},
  {key:'invoice',label:'Nota / Invoice (lihat dan print)'},
  {key:'invoiceDesign',label:'Edit Design Nota dan Background'},
  {key:'history',label:'History Bidding'},
@@ -252,8 +252,8 @@ function setRoleUI(){
  if(isAdmin()&&!accountBtn){accountBtn=document.createElement('button');accountBtn.id='accountNav';accountBtn.dataset.page='users';accountBtn.innerHTML='<span>♙</span>Manajemen Akun';accountBtn.onclick=()=>go('users');nav.appendChild(accountBtn);}
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
- const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details'};
- document.querySelectorAll('#nav button[data-page]').forEach(el=>{const shared=['sponsorDonors','sponsorGoods'].includes(el.dataset.page);const k=pageMap[el.dataset.page];const allowed=el.dataset.page==='cleanup'?isAdmin():shared?(isAdmin()||hasPermission('siteBidding')||hasPermission('siteDana')||hasPermission('siteSponsor')):(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
+ const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',inventory:'inventory',details:'details'};
+ document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];const allowed=el.dataset.page==='cleanup'?isAdmin():(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
  document.getElementById('who').textContent=currentUser+' · '+(isAdmin()?'ADMIN':'USER');
@@ -265,7 +265,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function refreshCloud(){
  if(!vdsAccessToken||document.getElementById('app').style.display==='none')return;
  if(!confirm('Muat ulang data dari cloud? Perubahan lokal yang belum tersimpan akan diganti.'))return;
- try{await vdsLoadCloud(currentSite);render();vdsSyncNote('Data cloud berhasil dimuat');}
+ try{await vdsLoadCloud(currentSite);if(currentPage==='inventory'){const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};}render();vdsSyncNote('Data cloud berhasil dimuat');}
  catch(e){alert('Gagal memuat cloud: '+e.message)}
 }
 function persist(){
@@ -288,315 +288,6 @@ async function vdsPublishTransactionUpdate(transaction, historyEntry){
  try{await vdsApi('save-state',{site:currentSite,state,sync_event:{transaction,history:historyEntry}});}
  catch(e){console.warn('Event transaksi gagal dipublikasikan:',e);vdsSyncNote('Perubahan tersimpan lokal; event live gagal dikirim',3500);vdsSaveCloud();}
 }
-let sharedSponsorData={donors:[],sponsors:[]};
-let sharedSponsorLoaded=false, sharedSponsorLoading=false;
-function canUseSharedSponsor(){return isAdmin()||hasPermission('siteBidding')||hasPermission('siteDana')||hasPermission('siteSponsor');}
-async function loadSharedSponsorData(){
- if(sharedSponsorLoaded)return true;
- if(sharedSponsorLoading){while(sharedSponsorLoading)await new Promise(r=>setTimeout(r,80));return sharedSponsorLoaded;}
- sharedSponsorLoading=true;
- try{
-  const out=await vdsApi('get-state',{site:'sponsor'});
-  const incoming=out.state&&typeof out.state==='object'?out.state:{};
-  sharedSponsorData={...incoming,donors:Array.isArray(incoming.donors)?incoming.donors:[],sponsors:Array.isArray(incoming.sponsors)?incoming.sponsors:[]};
-  // One-time compatibility migration: if the old shared sponsor record is empty,
-  // preserve legacy sponsor-barang rows from the current website state.
-  if(!sharedSponsorData.sponsors.length&&Array.isArray(state.sponsors)&&state.sponsors.length){
-   sharedSponsorData.sponsors=state.sponsors.map((x,i)=>({no:i+1,name:x.name||'',item:x.item||x.goods||'',quantity:Number(x.quantity??x.stock??1)}));
-   await saveSharedSponsorData(false);
-  }
-  sharedSponsorLoaded=true;return true;
- }catch(e){throw new Error('Data Sponsor bersama tidak dapat dimuat: '+(e.message||e));}
- finally{sharedSponsorLoading=false;}
-}
-async function saveSharedSponsorData(showNote=true){
- const payload={...sharedSponsorData,donors:Array.isArray(sharedSponsorData.donors)?sharedSponsorData.donors:[],sponsors:Array.isArray(sharedSponsorData.sponsors)?sharedSponsorData.sponsors:[]};
- await vdsApi('save-state',{site:'sponsor',state:payload});
- sharedSponsorData=payload;sharedSponsorLoaded=true;
- if(showNote)vdsSyncNote('Data Sponsor bersama berhasil disimpan',2200);
-}
-function sponsorDonorsPage(){
- const rows=sharedSponsorData.donors||[];const allowed=canUseSharedSponsor();
- return `<div class="panel"><div class="panelhead"><div><h3>DAFTAR DONATUR</h3><small>Data yang sama tampil di Website Bidding dan Dana Paramita.</small></div><div class="toolbar"><button class="soft" onclick="printSharedSponsor('donors')">Cetak / PDF</button>${allowed?'<button class="primary" onclick="editSharedSponsor(\'donor\',-1)">+ Tambah Donatur</button>':''}</div></div><div class="tablewrap"><table><thead><tr><th style="width:65px">NO</th><th>NAMA DONATUR</th><th style="width:220px">NOMINAL (RP)</th><th style="width:150px">AKSI</th></tr></thead><tbody>${rows.length?rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name||'')}</td><td style="text-align:right">${money(r.amount||0)}</td><td>${allowed?`<button class="soft" onclick="editSharedSponsor('donor',${i})">Edit</button> <button class="danger" onclick="deleteSharedSponsor('donor',${i})">Hapus</button>`:'-'}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada data donatur.</td></tr>'}</tbody></table></div><div class="note" style="margin-top:12px">Perubahan di salah satu website akan tersimpan pada database bersama.</div></div>`;
-}
-function sponsorGoodsPage(){
- const rows=sharedSponsorData.sponsors||[];const allowed=canUseSharedSponsor();
- return `<div class="panel"><div class="panelhead"><div><h3>DAFTAR SPONSOR BARANG</h3><small>Data yang sama tampil di Website Bidding dan Dana Paramita.</small></div><div class="toolbar"><button class="soft" onclick="printSharedSponsor('sponsors')">Cetak / PDF</button>${allowed?'<button class="primary" onclick="editSharedSponsor(\'goods\',-1)">+ Tambah Sponsor Barang</button>':''}</div></div><div class="tablewrap"><table><thead><tr><th style="width:65px">NO</th><th>NAMA SPONSOR</th><th>NAMA BARANG</th><th style="width:150px">JUMLAH</th><th style="width:150px">AKSI</th></tr></thead><tbody>${rows.length?rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name||'')}</td><td>${esc(r.item||'')}</td><td style="text-align:right">${Number(r.quantity||0).toLocaleString('id-ID')}</td><td>${allowed?`<button class="soft" onclick="editSharedSponsor('goods',${i})">Edit</button> <button class="danger" onclick="deleteSharedSponsor('goods',${i})">Hapus</button>`:'-'}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Belum ada data sponsor barang.</td></tr>'}</tbody></table></div><div class="note" style="margin-top:12px">Perubahan di salah satu website akan tersimpan pada database bersama.</div></div>`;
-}
-function editSharedSponsor(kind,index){
- if(!canUseSharedSponsor())return;const donor=kind==='donor',key=donor?'donors':'sponsors';const old=index>=0?sharedSponsorData[key][index]:{};
- document.getElementById('modalTitle').textContent=(index<0?'Tambah ':'Edit ')+(donor?'Donatur':'Sponsor Barang');
- document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field full"><label>${donor?'Nama Donatur':'Nama Sponsor'}</label><input id="sh_name" maxlength="160" value="${esc(old.name||'')}"></div>${donor?`<div class="field full"><label>Nominal Donasi (Rp)</label><input id="sh_amount" type="number" min="0" step="1" value="${Number(old.amount||0)}"></div>`:`<div class="field"><label>Nama Barang</label><input id="sh_item" maxlength="160" value="${esc(old.item||'')}"></div><div class="field"><label>Jumlah</label><input id="sh_quantity" type="number" min="0" step="1" value="${Number(old.quantity||1)}"></div>`}</div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveSharedSponsor('${kind}',${index})">Simpan</button></div>`;
- document.getElementById('modal').classList.add('show');
-}
-async function saveSharedSponsor(kind,index){
- const donor=kind==='donor',key=donor?'donors':'sponsors';const name=document.getElementById('sh_name').value.trim().toLocaleUpperCase('id-ID');
- if(!name){alert('Nama wajib diisi.');return;}
- const row=donor?{name,amount:Math.max(0,Number(document.getElementById('sh_amount').value||0))}:{name,item:document.getElementById('sh_item').value.trim().toLocaleUpperCase('id-ID'),quantity:Math.max(0,Number(document.getElementById('sh_quantity').value||0))};
- if(!donor&&!row.item){alert('Nama barang wajib diisi.');return;}
- if(index>=0)sharedSponsorData[key][index]=row;else sharedSponsorData[key].push(row);
- try{await saveSharedSponsorData();closeModal();render();}catch(e){alert('Gagal menyimpan ke cloud: '+e.message);}
-}
-async function deleteSharedSponsor(kind,index){if(!canUseSharedSponsor())return;if(!confirm('Hapus data ini dari kedua website?'))return;const key=kind==='donor'?'donors':'sponsors';sharedSponsorData[key].splice(index,1);try{await saveSharedSponsorData();render();}catch(e){alert('Gagal menghapus dari cloud: '+e.message);}}
-function printSharedSponsor(kind){const donor=kind==='donors',rows=sharedSponsorData[kind]||[];if(!rows.length){alert('Belum ada data.');return;}const title=donor?'DAFTAR DONATUR':'DAFTAR SPONSOR BARANG';const body=rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name||'')}</td>${donor?`<td>Rp ${Number(r.amount||0).toLocaleString('id-ID')}</td>`:`<td>${esc(r.item||'')}</td><td>${Number(r.quantity||0).toLocaleString('id-ID')}</td>`}</tr>`).join('');const w=window.open('','_blank');if(!w){alert('Izinkan pop-up untuk mencetak PDF.');return;}w.document.write(`<html><head><title>${title}</title><style>body{font-family:Arial;padding:24px}h2{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:9px}th{background:#eee}</style></head><body><h2>${title}</h2><table><thead><tr>${donor?'<th>No</th><th>Nama Donatur</th><th>Nominal</th>':'<th>No</th><th>Nama Sponsor</th><th>Barang</th><th>Jumlah</th>'}</tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);w.document.close();}
-async function vdsLoadCloud(site){
- const out=await vdsApi('get-state',{site});
- if(out.state&&typeof out.state==='object'){
-   state=out.state;
-   if(!Array.isArray(state.history))state.history=[];
-   if(!Array.isArray(state.transactions))state.transactions=[];
-   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(state));}catch(e){}
-   vdsCloudLoaded[site]=true;return true;
- }
- // First-use only: migrate this browser's existing V83 data once if cloud is empty.
- const key=site==='dana'?'danaViharaState':'biddingViharaState';
- const local=localStorage.getItem(key);
- if(local){try{const parsed=JSON.parse(local);if(parsed&&typeof parsed==='object'){state=parsed;await vdsApi('save-state',{site,state});vdsCloudLoaded[site]=true;return true;}}catch(e){console.warn('Local migration skipped',e)}}
- state=site==='dana'?JSON.parse(JSON.stringify(danaSeed)):JSON.parse(JSON.stringify(seed));
- await vdsApi('save-state',{site,state});vdsCloudLoaded[site]=true;return true;
-}
-async function login(){
- const n=document.getElementById('loginName').value.trim(),p=document.getElementById('loginPass').value,err=document.getElementById('loginError');
- if(!n||!p){err.textContent='Masukkan username dan password.';err.style.display='block';return;}
- const btn=document.querySelector('#login button.primary');if(btn){btn.disabled=true;btn.textContent='MEMERIKSA…';}
- try{
-  const out=await vdsApi('login',{username:n,password:p},'');
-  vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
-  currentProfile=out.user;currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
-  // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
-  // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
-  accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
-  err.style.display='none';document.getElementById('login').style.display='none';
-  if(out.user.must_change_password){
-    const next=prompt('Ini login pertama. Buat password baru (minimal 8 karakter):');
-    if(!next||next.length<8){alert('Password baru minimal 8 karakter. Silakan login kembali setelah siap menggantinya.');logout();return;}
-    await vdsApi('change-password',{newPassword:next});
-    alert('Password berhasil diganti.');
-  }
-  if(!isAdmin()){
-   const canBidding=hasPermission('siteBidding'),canDana=hasPermission('siteDana');
-   if(canBidding!==canDana){await openSite(canBidding?'bidding':'dana');return;}
-   if(!canBidding&&!canDana){document.getElementById('sitePortal').style.display='grid';document.getElementById('portalGreeting').textContent='Login sebagai '+currentUser;document.getElementById('portalError').textContent='Akun ini belum diberi akses website. Hubungi Admin.';const bs=document.querySelectorAll('#sitePortal .loginbox>div button');bs.forEach(b=>b.style.display='none');setRoleUI();return;}
-  }
-  document.getElementById('sitePortal').style.display='grid';document.getElementById('portalGreeting').textContent='Login sebagai '+currentUser+' — pilih website yang ingin dibuka.';
-  const bs=document.querySelectorAll('#sitePortal .loginbox>div button');if(bs[0])bs[0].style.display=(!isAdmin()&&!hasPermission('siteBidding'))?'none':'';if(bs[1])bs[1].style.display=(!isAdmin()&&!hasPermission('siteDana'))?'none':'';
-  document.getElementById('portalError').textContent='';setRoleUI();
- }catch(e){vdsAccessToken='';sessionStorage.removeItem('vds_access_token');currentProfile=null;currentUser='';currentRole='';document.getElementById('login').style.display='grid';err.textContent=e.message||'Login gagal. Periksa koneksi dan konfigurasi Supabase.';err.style.display='block';}
- finally{if(btn){btn.disabled=false;btn.textContent='MASUK';}}
-}
-async function vdsLoadUsers(){
- const out=await vdsApi('list-users');
- accounts=(out.users||[]).map(u=>({...u,createdAt:u.created_at,password:undefined}));
- window.__vdsUsersLoaded=true;
- return accounts;
-}
-
-async function openSite(site, inNewTab=false){
- if(site!=='bidding'&&site!=='dana')return;
- // Perpindahan dari tombol Pilih Website membuka tab baru dengan handoff sesi.
- const switchToNewTab=!inNewTab&&!!window.__switchWebsiteNewTab;
- window.__switchWebsiteNewTab=false;
- if(switchToNewTab){
-  const handoffKey='vdsWebsiteTabHandoff';
-  try{
-   localStorage.setItem(handoffKey,JSON.stringify({token:vdsAccessToken,username:currentUser,role:currentRole,profile:currentProfile,site:site,expires:Date.now()+60000}));
-  }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
-  const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
-  const opened=window.open(target,'_blank');
-  if(!opened){localStorage.removeItem(handoffKey);alert('Tab baru diblokir browser. Izinkan pop-up untuk website ini, lalu coba lagi.');}
-  return;
- }
- if(!isAdmin()&&!hasPermission(site==='bidding'?'siteBidding':'siteDana')){alert('Akses ke website ini belum diberikan oleh Admin.');return;}
- currentSite=site;document.body.classList.toggle('site-dana',site==='dana');try{localStorage.setItem('vds_last_site',site);const saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'{}');saved.site=site;localStorage.setItem('vds_remembered_session',JSON.stringify(saved));}catch(e){}
- // Tombol pindah website hanya tampil bila akun memang memiliki akses ke KEDUA website.
- const switchBtn=document.getElementById('portalSwitchBtn');
- if(switchBtn)switchBtn.style.display=(isAdmin()||(hasPermission('siteBidding')&&hasPermission('siteDana')))?'':'none';
- vdsSyncNote('Memuat data '+(site==='dana'?'Dana Paramita':'Bidding')+'…',0);
- try{
-  await vdsLoadCloud(site);
-  vdsSyncNote('Data '+(site==='dana'?'Dana Paramita':'Bidding')+' berhasil dimuat',2200);
- }catch(e){
-  vdsSyncNote('Gagal memuat data cloud',3500);
-  alert('Tidak dapat memuat data cloud: '+e.message+'\nData lokal tidak akan ditimpa.');
-  return;
- }
- invoiceBackground=localStorage.getItem(siteBgKey())||(site==='dana'?danaDefaultInvoiceBackground:defaultInvoiceBackground);
- loadInvoiceBgView();
- loadInvoiceLayoutForSite(site);
- document.getElementById('sitePortal').style.display='none';document.getElementById('app').style.display='grid';
- const title=site==='dana'?'DANA PARAMITA':'BIDDING 2026';
- document.querySelector('.brand b').textContent=site==='dana'?'泰安廟 · DANA PARAMITA':'泰安廟 · BIDDING';
- document.querySelector('.brand small').textContent=site==='dana'?'Yayasan Vihara Dharma Shanti Kundur':'Yayasan Vihara Dharma Shanti Tanjung Batu';
- document.querySelector('.eyebrow').textContent=site==='dana'?'Sistem administrasi Dana Paramita':'Sistem administrasi bidding';
- document.getElementById('pageTitle').textContent=title;
- await vdsStartRealtime(site);
- const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
- setRoleUI();go('dashboard');
-}
-async function backToPortal(){
- if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana')))return;
- // Simpan snapshot website yang sedang dibuka SEBELUM currentSite berubah.
- // Ini mencegah debounce save menulis data Bidding ke Dana (atau sebaliknya).
- const previousSite=currentSite;
- let previousState;
- try{previousState=JSON.parse(JSON.stringify(state));}catch(e){previousState=state;}
- try{localStorage.setItem(previousSite==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(previousState));}catch(e){}
- clearTimeout(vdsSaveTimer);
- // Tunggu request simpan yang sedang berjalan agar urutan simpan tetap aman.
- while(vdsSaving)await new Promise(resolve=>setTimeout(resolve,50));
- try{
-  if(vdsAccessToken&&previousSite)await vdsApi('save-state',{site:previousSite,state:previousState});
- }catch(e){
-  alert('Data belum berhasil disimpan ke cloud. Website tidak akan ditutup.\n'+(e.message||e));
-  return;
- }
- vdsStopRealtime();
- // Pilihan website berikutnya membuka tab baru, sesi login dibawa otomatis.
- window.__switchWebsiteNewTab=true;
- document.getElementById('app').style.display='none';
- document.getElementById('sitePortal').style.display='grid';
-}
-function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
-function go(p){
- if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
- const sharedPage=['sponsorDonors','sponsorGoods'].includes(p);
- if(sharedPage&&!canUseSharedSponsor()){alert('Akses ditolak.');return;}
- if(p!=='users'&&!sharedPage&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
- currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
- const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',sponsorDonors:'Data Sponsor',sponsorGoods:'Data Sponsor Barang'};
- document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
- if(sharedPage){document.getElementById('content').innerHTML='<div class="panel">Memuat database sponsor bersama…</div>';loadSharedSponsorData().then(()=>{if(currentPage===p)render();}).catch(e=>{if(currentPage===p)document.getElementById('content').innerHTML='<div class="panel">'+esc(e.message||'Gagal memuat data sponsor')+'</div>';});return;}
- if(p==='users'&&!window.__vdsUsersLoaded){
-   document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
-   if(!window.__vdsUsersLoading){
-     window.__vdsUsersLoading=true;
-     vdsLoadUsers().then(()=>{window.__vdsUsersLoading=false;if(currentPage==='users')render();})
-       .catch(e=>{window.__vdsUsersLoading=false;document.getElementById('content').innerHTML='<div class="panel">Gagal memuat akun: '+escapeHtml(e.message||'Kesalahan koneksi')+'</div>';});
-   }
-   return;
- }
- render();
-}
-function total(){return state.transactions.reduce((s,t)=>s+Number(t.total||0),0)}
-function paid(method){return state.transactions.filter(t=>t.payment===method).reduce((s,t)=>s+Number(t.total||0)+Number(t.overpay||0),0)}
-function unpaid(){return state.transactions.filter(t=>!t.payment).reduce((s,t)=>s+Number(t.total||0),0)}
-function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();
-if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();
-if(currentPage==='transactions')c.innerHTML=transactionsPage();
-if(currentPage==='history')c.innerHTML=historyPage();
-if(currentPage==='invoice')c.innerHTML=invoicePage();
-if(currentPage==='details')c.innerHTML=detailsPage();
-if(currentPage==='sponsorDonors')c.innerHTML=sponsorDonorsPage();
-if(currentPage==='sponsorGoods')c.innerHTML=sponsorGoodsPage();
-if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();
-if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls()}}
-function cleanupPage(){
- if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
- return `<div class="panel">
-  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
-  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
-  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
-   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
-   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
-   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
-   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
-   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
-  </tbody></table></div>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
-   <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
-   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
-  </div>
- </div>`;
-}
-function resetOperationalArrays(target){
- target.transactions=[];
- target.history=[];
- if(Array.isArray(target.items)){
-  const priceByNo=new Map((target.prices||[]).map(p=>[String(p.no),p]));
-  target.items=target.items.map(item=>{
-   const master=priceByNo.get(String(item.no));
-   const stock=Number(master?.stock??item.stock??0);
-   return {...item,bid:0,remain:stock,sum:0,return:null};
-  });
- }
-}
-async function clearTestingData(){
- if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data testing.');return;}
- const ok=confirm('PERINGATAN: Semua Live Bidding, History Bidding, dan Live Laporan Dana pada KEDUA website akan dihapus. Daftar harga, item, akun, pengaturan nota, dan konfigurasi tetap disimpan. Lanjutkan?');
- if(!ok)return;
- const phrase=prompt('Untuk konfirmasi, ketik: HAPUS DATA TESTING');
- if(phrase!=='HAPUS DATA TESTING'){alert('Dibatalkan. Teks konfirmasi tidak sesuai.');return;}
- const btn=document.querySelector('#content button.danger');
- if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
- try{
-  for(const site of ['bidding','dana']){
-   const out=await vdsApi('get-state',{site});
-   let target=out.state&&typeof out.state==='object'?out.state:null;
-   if(!target){
-    const key=site==='dana'?'danaViharaState':'biddingViharaState';
-    try{target=JSON.parse(localStorage.getItem(key)||'null');}catch(e){target=null;}
-   }
-   if(!target)throw new Error('Data cloud '+site+' tidak ditemukan. Tidak ada data yang diubah pada website ini.');
-   resetOperationalArrays(target);
-   await vdsApi('save-state',{site,state:target});
-   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(target));}catch(e){}
-   if(currentSite===site)state=target;
-  }
-  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=true;vdsCloudLoaded.dana=true;}
-  render();
-  alert('Berhasil. Data Live Bidding, History Bidding, dan Live Laporan Dana pada kedua website sudah dikosongkan. Master data dan pengaturan tetap tersimpan.');
- }catch(e){
-  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
-  console.error(e);
- }finally{
-  const b=document.querySelector('#content button.danger');
-  if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
- }
-}
-
-
-function usersPage(){
- if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
- return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
- <div class="tablewrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Hak Akses</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>
- ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'?'':`<button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button>`}</td></tr>`).join('')}
- </tbody></table></div><div class="note" style="margin-top:14px">Semua izin User secara default NONAKTIF. Centang hanya fitur yang boleh digunakan oleh akun tersebut. Admin selalu memiliki akses penuh.</div></div>`;
-}
-function showAddAccount(){
- if(!isAdmin())return;
- document.getElementById('modalTitle').textContent='Tambah Akun';
- document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field full"><label>Username</label><input id="newUsername" autocomplete="off" placeholder="Contoh: petugas1"></div><div class="field"><label>Password</label><input id="newPassword" type="password" placeholder="Minimal 6 karakter"></div><div class="field"><label>Role</label><select id="newRole" onchange="toggleNewAccountPermissions()"><option value="user">User</option><option value="admin">Admin</option></select></div></div><div id="newPermissions"><div class="permission-heading">Izin fitur untuk User</div>${accountPermissionsMarkup({})}<small>Secara default semua fitur tidak diizinkan.</small></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="createAccount()">Simpan Akun</button></div>`;
- document.getElementById('modal').classList.add('show');
-}
-function toggleNewAccountPermissions(){const role=document.getElementById('newRole').value;document.getElementById('newPermissions').style.display=role==='user'?'':'none';}
-function editAccountPermissions(i){
- if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
- const a=accounts[i];document.getElementById('modalTitle').textContent='Atur Izin Fitur — '+a.username;
- document.getElementById('modalBody').innerHTML=`<p>Pilih fitur yang boleh diakses oleh akun <b>${esc(a.username)}</b>. Fitur yang tidak dicentang akan ditolak.</p>${accountPermissionsMarkup(a.permissions||{})}<div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveAccountPermissions(${i})">Simpan Izin</button></div>`;
- document.getElementById('modal').classList.add('show');
-}
-async function saveAccountPermissions(i){
- if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
- const permissions=readPermissionChecks();
- try{await vdsApi('update-user',{id:accounts[i].id,permissions});accounts[i].permissions=permissions;closeModal();render();alert('Izin fitur berhasil disimpan.');}
- catch(e){alert('Gagal menyimpan izin: '+e.message);}
-}
-async function createAccount(){
- if(!isAdmin())return;
- const username=document.getElementById('newUsername').value.trim(),password=document.getElementById('newPassword').value,role=document.getElementById('newRole').value;
- if(!/^[a-zA-Z0-9._-]{3,24}$/.test(username)){alert('Username harus 3–24 karakter.');return;}
- if(accounts.some(a=>a.username.toLowerCase()===username.toLowerCase())){alert('Username sudah digunakan.');return;}
- if(password.length<6){alert('Password minimal 6 karakter.');return;}
- const permissions={};permissionCatalog.forEach(x=>permissions[x.key]=false);document.querySelectorAll('.account-permission').forEach(el=>permissions[el.value]=el.checked);if(role==='admin')permissionCatalog.forEach(x=>permissions[x.key]=true);
- try{await vdsApi('create-user',{username,password,role,permissions});await vdsLoadUsers();closeModal();render();alert('Akun '+username+' berhasil dibuat di Supabase.');}
- catch(e){alert('Gagal membuat akun: '+e.message);}
-}
-async function toggleAccount(i){if(!isAdmin()||!accounts[i]||accounts[i].username===currentUser)return;const active=accounts[i].active===false;try{await vdsApi('update-user',{id:accounts[i].id,active});accounts[i].active=active;render();}catch(e){alert(e.message)}}
-async function changeAccountPassword(i){
- if(!isAdmin()||!accounts[i])return;const next=prompt('Masukkan password baru untuk '+accounts[i].username+' (minimal 6 karakter):');if(next===null)return;if(next.length<6){alert('Password minimal 6 karakter.');return;}
- try{await vdsApi('reset-password',{id:accounts[i].id,password:next});alert('Password direset. Pengguna wajib menggantinya saat login berikutnya.');}catch(e){alert('Gagal reset password: '+e.message)}
-}
-
 function dashboard(){return `<div class="cards"><div class="card"><small>Total Dana Bidding</small><strong>${money(total())}</strong></div><div class="card"><small>Total Transaksi</small><strong>${state.transactions.length}</strong></div><div class="card"><small>Total Cash</small><strong>${money(paid('CASH'))}</strong></div><div class="card"><small>Belum Dibayar</small><strong>${money(unpaid())}</strong></div></div><div class="panel"><div class="panelhead"><h3>Aktivitas Transaksi Terbaru</h3><button class="primary" onclick="go('transactions')">Buka Live Laporan Dana</button></div>${transactionTable(state.transactions.slice(-8).reverse())}</div><div class="note">Prototype tahap awal. Data contoh master diambil dari workbook. Transaksi baru yang dimasukkan di sini tersimpan pada browser/perangkat ini saja sampai database online diaktifkan.</div>`}
 function catalogPage(){
  const allowed=isAdmin()||hasPermission('prices')||hasPermission('items');
@@ -615,6 +306,160 @@ function deleteCatalogItem(i){
  persist();render();
 }
 function tablePage(title,heads,rows,key,fields,type){const allowed=isAdmin()||hasPermission(type==='price'?'prices':type==='item'?'items':'sponsors');return `<div class="panel"><div class="panelhead"><h3>${title}</h3><div class="toolbar"><input placeholder="Cari..." oninput="filterTable(this)"><button class="primary" onclick="addRow('${type}')" ${allowed?'':'style="display:none"'}>+ Tambah Data</button></div></div><div class="tablewrap"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}<th>Aksi</th></tr></thead><tbody id="dataRows">${rows.map((r,i)=>`<tr>${fields.map(f=>`<td>${esc(r[f]??'')}</td>`).join('')}<td><button class="soft" onclick="editRow('${type}',${i})" ${allowed?'':'style="display:none"'}>Edit</button></td></tr>`).join('')}</tbody></table></div></div>`}
+let sharedInventory={items:[],returns:[],updated_at:null};
+let sharedInventoryBusy=false;
+function inventoryCatalogProgress(product){
+ const name=String(product?.name||'').trim().toLowerCase();
+ const progress=(state.items||[]).find(x=>String(x.name||'').trim().toLowerCase()===name);
+ const bid=Number(progress?.bid||0);
+ const stock=Number(progress?.stock??product?.stock??0);
+ const remain=Number(progress?.remain??Math.max(0,stock-bid));
+ return {progress,bid,stock,remain};
+}
+function inventoryPage(){
+ const products=Array.isArray(sharedInventory.items)?sharedInventory.items:[];
+ const returns=Array.isArray(sharedInventory.returns)?sharedInventory.returns:[];
+ const catalog=Array.isArray(state.prices)?state.prices:[];
+ const fmt=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
+ const addOptions=catalog.map((p,i)=>`<option value="${i}">${esc(p.name)}${Number(p.price||0)>0?' — '+fmt(p.price):''}</option>`).join('');
+ const returnOptions=catalog.map((p,i)=>{
+  const stock=inventoryCatalogProgress(p).remain;
+  return `<option value="${i}">${esc(p.name)} — stok tersedia ${stock}</option>`;
+ }).join('');
+ const totalAvailable=catalog.reduce((n,p)=>n+inventoryCatalogProgress(p).remain,0);
+ const totalReturned=returns.reduce((n,x)=>n+Number(x.qty||0),0);
+ return `<div class="cards"><div class="card"><small>Jenis Barang</small><strong>${catalog.length}</strong></div><div class="card"><small>Total Stok Tersedia</small><strong>${totalAvailable}</strong></div><div class="card"><small>Total Retur</small><strong>${returns.length}</strong></div><div class="card"><small>Jumlah Diretur</small><strong>${totalReturned}</strong></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Stok mengikuti Daftar Harga & Item dan tersimpan terpisah sesuai website yang sedang dibuka.</small></div><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div>
+ <div class="formgrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+ <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invAddProduct" onchange="syncInventoryProductPrice()"><option value="">Pilih barang</option>${addOptions}</select></div>${currentSite==='dana'?'<div class="field" style="margin-top:10px"><label>Harga Daftar</label><input id="invAddPrice" readonly placeholder="Otomatis dari Daftar Harga & Item"></div>':''}<div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy||!catalog.length?'disabled':''}>Simpan Barang</button></div>
+ <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Otomatis mengikuti sisa stok pada Daftar Harga & Item. Sesuaikan jika hasil hitung fisik berbeda.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!catalog.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Stok tersedia mengikuti sisa stok Daftar Harga & Item dan berkurang otomatis saat retur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Harga Daftar</th><th>Jumlah Stok</th><th>Sudah Diretur</th><th>Tersedia</th><th>Keterangan</th></tr></thead><tbody>${catalog.length?catalog.map((p,i)=>{const stock=inventoryCatalogProgress(p);const inv=products.find(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());const returned=returns.filter(x=>String(x.itemName||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase()).reduce((n,x)=>n+Number(x.qty||0),0);return `<tr><td>${i+1}</td><td><b>${esc(p.name)}</b></td><td>${fmt(p.price||0)}</td><td>${stock.stock}</td><td>${returned}</td><td><b>${stock.remain}</b></td><td>${esc(inv?.notes||'-')}</td></tr>`}).join(''):'<tr><td colspan="7" class="empty">Belum ada barang di Daftar Harga & Item.</td></tr>'}</tbody></table></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur untuk website ini saja. Edit dan hapus hanya tersedia untuk Admin.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryReturn('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryReturn('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat retur.</td></tr>`}</tbody></table></div></div>`;
+}
+function syncInventoryProductPrice(){
+ const select=document.getElementById('invAddProduct');const field=document.getElementById('invAddPrice');
+ if(!select||!field)return;const product=state.prices?.[Number(select.value)];field.value=product?'Rp '+Number(product.price||0).toLocaleString('id-ID'):'';
+}
+function syncInventoryRemaining(){
+ const index=document.getElementById('invReturnItem')?.value??'';
+ const product=index===''?null:state.prices?.[Number(index)];
+ const field=document.getElementById('invReturnRemaining');
+ if(field)field.value=product?String(inventoryCatalogProgress(product).remain):'0';
+}
+async function refreshSharedInventory(){
+ try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};sharedInventory.returns=(sharedInventory.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});render();vdsSyncNote('Data stok website ini berhasil diperbarui');}
+ catch(e){alert('Gagal memuat data barang: '+e.message);}
+}
+async function saveSharedInventory(next){
+ if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan data barang…',0);
+ try{next.returns=(next.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Data stok website ini tersimpan di cloud');return true;}
+ catch(e){alert('Gagal menyimpan data barang: '+e.message);vdsSyncNote('Gagal menyimpan data barang',3000);return false;}
+ finally{sharedInventoryBusy=false;}
+}
+async function addInventoryItem(){
+ if(!(isAdmin()||hasPermission('inventory')||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}
+ const index=document.getElementById('invAddProduct')?.value??'',product=index===''?null:state.prices?.[Number(index)];
+ const qty=Number(document.getElementById('invAddQty')?.value||0),notes=document.getElementById('invAddNote')?.value.trim()||'';
+ if(!product){alert('Pilih barang dari Daftar Harga & Item.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah masuk minimal 1.');return;}
+ const name=String(product.name||'').trim(),catalogNo=product.no??Number(index)+1,price=Number(product.price||0);
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];
+ let inv=next.items.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
+ if(inv){inv.catalogNo=catalogNo;inv.name=name;inv.price=price;inv.totalQty=Number(inv.totalQty||0)+qty;inv.availableQty=Number(inv.availableQty||0)+qty;inv.notes=notes||inv.notes||'';inv.updatedAt=new Date().toISOString();}
+ else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()});
+ if(!await saveSharedInventory(next))return;
+ const stock=inventoryCatalogProgress(product);const newStock=stock.stock+qty,newRemain=stock.remain+qty;
+ product.stock=newStock;
+ let progress=stock.progress;
+ if(progress){progress.stock=newStock;progress.remain=newRemain;}
+ else state.items.push({no:catalogNo,name,stock:newStock,bid:0,remain:newRemain,sum:0,return:null});
+ persist();render();
+}
+async function returnInventoryItem(){
+ if(!(isAdmin()||hasPermission('inventory')||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}
+ const index=document.getElementById('invReturnItem')?.value??'',product=index===''?null:state.prices?.[Number(index)];
+ const remaining=Number(document.getElementById('invReturnRemaining')?.value||0),qty=Number(document.getElementById('invReturnQty')?.value||0),notes=document.getElementById('invReturnNote')?.value.trim()||'';
+ if(!product){alert('Pilih barang dari Daftar Harga & Item.');return;}
+ if(!Number.isInteger(remaining)||remaining<0){alert('Isi jumlah sisa barang dengan angka 0 atau lebih.');return;}
+ if(!Number.isInteger(qty)||qty<1){alert('Jumlah retur minimal 1.');return;}
+ if(qty>remaining){alert('Jumlah retur tidak boleh melebihi sisa barang ('+remaining+').');return;}
+ const name=String(product.name||'').trim(),catalogNo=product.no??Number(index)+1;
+ const stock=inventoryCatalogProgress(product),bid=stock.bid;
+ const reconciledStock=bid+remaining,afterReturn=remaining-qty,newStock=reconciledStock-qty;
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];
+ let inv=next.items.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
+ if(inv){inv.catalogNo=catalogNo;inv.name=name;inv.price=Number(product.price||0);inv.totalQty=reconciledStock;inv.returnedQty=Number(inv.returnedQty||0)+qty;inv.availableQty=afterReturn;inv.updatedAt=new Date().toISOString();}
+ else {inv={id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price:Number(product.price||0),totalQty:reconciledStock,returnedQty:qty,availableQty:afterReturn,notes:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};next.items.push(inv);}
+ next.returns.push({id:'ret-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:inv.id,itemName:name,catalogNo,qty,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
+ if(!await saveSharedInventory(next))return;
+ product.stock=newStock;
+ let progress=stock.progress;
+ if(progress){progress.stock=newStock;progress.remain=afterReturn;}
+ else state.items.push({no:catalogNo,name,stock:newStock,bid,remain:afterReturn,sum:0,return:null});
+ persist();render();
+}
+
+function applyInventoryReturnStockDelta(itemName, delta){
+ const name=String(itemName||'').trim();if(!name||!Number(delta))return;
+ const product=(state.prices||[]).find(p=>String(p.name||'').trim().toLowerCase()===name.toLowerCase());
+ if(!product)return;
+ const stock=inventoryCatalogProgress(product),nextStock=Math.max(0,stock.stock+delta),nextRemain=Math.max(0,stock.remain+delta);
+ product.stock=nextStock;
+ if(stock.progress){stock.progress.stock=nextStock;stock.progress.remain=nextRemain;}
+ else state.items.push({no:product.no||state.items.length+1,name,stock:nextStock,bid:stock.bid,remain:nextRemain,sum:0,return:null});
+}
+function recalculateInventorySummary(next, itemName){
+ const name=String(itemName||'').trim().toLowerCase();if(!name)return;
+ const inv=(next.items||[]).find(x=>String(x.name||'').trim().toLowerCase()===name);
+ const related=(next.returns||[]).filter(x=>String(x.itemName||'').trim().toLowerCase()===name);
+ const returned=related.reduce((sum,x)=>sum+Number(x.qty||0),0);
+ if(inv){inv.returnedQty=returned;inv.availableQty=Math.max(0,Number(inv.totalQty||0)-returned);inv.updatedAt=new Date().toISOString();}
+}
+function editInventoryReturn(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengedit data retur.');return;}
+ const record=(sharedInventory.returns||[]).find(x=>String(x.id)===String(id));if(!record)return;
+ const catalog=state.prices||[];
+ const options=catalog.map((p,i)=>`<option value="${i}" ${String(p.name||'').trim().toLowerCase()===String(record.itemName||'').trim().toLowerCase()?'selected':''}>${esc(p.name)}</option>`).join('');
+ document.getElementById('modalTitle').textContent='Edit Data Retur';
+ document.getElementById('modalBody').innerHTML=`<div class="field"><label>Nama Barang</label><select id="editReturnProduct">${options}</select></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="editReturnQty" type="number" min="1" step="1" value="${Number(record.qty||1)}"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="editReturnNotes" value="${esc(record.notes||'')}" placeholder="Opsional"></div><div class="toolbar" style="justify-content:flex-end;margin-top:16px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveInventoryReturnEdit('${esc(record.id)}')">Simpan Perubahan</button></div>`;
+ document.getElementById('modal').classList.add('show');
+}
+async function saveInventoryReturnEdit(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengedit data retur.');return;}
+ if(sharedInventoryBusy)return;
+ const original=(sharedInventory.returns||[]).find(x=>String(x.id)===String(id));if(!original)return;
+ const productSelect=document.getElementById('editReturnProduct');
+ const newIndex=productSelect&&productSelect.value!==''?Number(productSelect.value):-1,newProduct=newIndex>=0?state.prices?.[newIndex]:null;
+ const qty=Number(document.getElementById('editReturnQty')?.value),notes=document.getElementById('editReturnNotes')?.value.trim()||'';
+ if(!newProduct){alert('Pilih barang yang valid.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah retur minimal 1.');return;}
+ const oldName=String(original.itemName||'').trim(),newName=String(newProduct.name||'').trim(),oldQty=Number(original.qty||0),same=oldName.toLowerCase()===newName.toLowerCase();
+ const available=inventoryCatalogProgress(newProduct).remain+(same?oldQty:0);
+ if(qty>available){alert('Jumlah retur melebihi stok yang tersedia ('+available+').');return;}
+ const next=JSON.parse(JSON.stringify(sharedInventory));const record=next.returns.find(x=>String(x.id)===String(id));
+ record.itemName=newName;record.catalogNo=newProduct.no??newIndex+1;record.qty=qty;delete record.reason;record.notes=notes;record.updatedAt=new Date().toISOString();record.updatedBy=currentUser;
+ recalculateInventorySummary(next,oldName);recalculateInventorySummary(next,newName);
+ const summary=(next.items||[]).find(x=>String(x.name||'').trim().toLowerCase()===newName.toLowerCase());
+ if(!summary){const s=inventoryCatalogProgress(newProduct);next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo:record.catalogNo,name:newName,price:Number(newProduct.price||0),totalQty:s.stock+(same?0:qty),returnedQty:0,availableQty:s.stock+(same?0:qty),notes:'',createdAt:new Date().toISOString()});recalculateInventorySummary(next,newName);}
+ if(!await saveSharedInventoryAdmin(next))return;
+ if(same)applyInventoryReturnStockDelta(oldName,oldQty-qty);else{applyInventoryReturnStockDelta(oldName,oldQty);applyInventoryReturnStockDelta(newName,-qty);}
+ persist();closeModal();render();vdsSyncNote('Data retur berhasil diperbarui dan stok disesuaikan');
+}
+async function deleteInventoryReturn(id){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data retur.');return;}
+ const record=(sharedInventory.returns||[]).find(x=>String(x.id)===String(id));if(!record)return;
+ if(!confirm('Hapus riwayat retur '+(record.itemName||'')+' sebanyak '+Number(record.qty||0)+'? Stok barang akan dikembalikan otomatis.'))return;
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.returns=(next.returns||[]).filter(x=>String(x.id)!==String(id));
+ recalculateInventorySummary(next,record.itemName);
+ if(!await saveSharedInventoryAdmin(next))return;
+ applyInventoryReturnStockDelta(record.itemName,Number(record.qty||0));persist();render();vdsSyncNote('Data retur dihapus dan stok dikembalikan');
+}
+async function saveSharedInventoryAdmin(next){
+ if(!isAdmin()){alert('Hanya Admin yang dapat mengubah riwayat retur.');return false;}
+ if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan perubahan retur…',0);
+ try{next.returns=(next.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Perubahan retur tersimpan di cloud');return true;}
+ catch(e){alert('Gagal menyimpan perubahan retur: '+e.message);vdsSyncNote('Gagal menyimpan perubahan retur',3000);return false;}
+ finally{sharedInventoryBusy=false;}
+}
+
 function transactionSortValue(value){const digits=String(value??'').replace(/[^0-9]/g,'');return digits?Number(digits):Number.MAX_SAFE_INTEGER;}
 function sortedTransactionsByOrder(rows=state.transactions){return [...(rows||[])].sort((a,b)=>{const an=transactionSortValue(a.bidNo),bn=transactionSortValue(b.bidNo);if(an!==bn)return an-bn;const ai=transactionSortValue(a.invoice),bi=transactionSortValue(b.invoice);if(ai!==bi)return ai-bi;return String(a.createdAt||'').localeCompare(String(b.createdAt||''));});}
 function transactionTable(rows){if(!rows.length)return '<div class="empty">Belum ada transaksi. Klik Tambah Transaksi untuk mulai.</div>';return `<div class="tablewrap"><table><thead><tr><th>No. Nota</th><th>${currentSite==='dana'?'ORDER NO':'BID NO'}</th><th>Nama Barang</th><th>Bidder</th><th>Nominal</th><th>Qty</th><th>Total</th><th>Petugas</th><th>Pembayaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(t=>`<tr><td>${t.invoice}</td><td>${esc(t.bidNo)}</td><td>${esc(t.itemName)}</td><td>${esc(t.bidder)}</td><td>${money(t.price)}</td><td>${t.qty}</td><td><b>${money(t.total)}</b></td><td>${esc(t.staff||'-')}</td><td><span class="pill ${t.payment?'paid':'unpaid'}">${t.payment||'BELUM BAYAR'}</span></td><td><button class="primary" onclick="showPaymentOptions('${t.id}')">${t.payment?'Ganti Bayar':'BAYAR'}</button> <button class="soft" onclick="editTransaction('${t.id}')">Edit</button> <button class="soft" onclick="openInvoice('${t.id}')">Nota</button></td></tr>`).join('')}</tbody></table></div>`}
@@ -1382,6 +1227,9 @@ function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.
 (function receiveWebsiteTabHandoff(){
  const match=location.hash.match(/(?:^|[#&])open-site=([^&]+)/);
  if(!match)return;
+ // Prevent the normal remembered-session restore from racing this handoff
+ // and reopening the previous website in the new tab.
+ window.__vdsHandoffHandled=true;
  const requestedSite=decodeURIComponent(match[1]||'');
  const key='vdsWebsiteTabHandoff';
  let data=null;
@@ -1397,15 +1245,257 @@ function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.
  currentUser=data.username;
  currentRole=String(data.role||'user').toLowerCase();
  currentProfile=data.profile||{username:currentUser,role:currentRole};
+ try{localStorage.setItem('vds_last_site',requestedSite);const saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'{}');saved.site=requestedSite;localStorage.setItem('vds_remembered_session',JSON.stringify(saved));}catch(e){}
  document.getElementById('login').style.display='none';
  document.getElementById('sitePortal').style.display='none';
  openSite(requestedSite,true).catch(e=>{alert('Gagal membuka website: '+(e.message||e));});
 })();
 
 
+async function vdsLoadCloud(site){
+ const out=await vdsApi('get-state',{site});
+ if(out.state&&typeof out.state==='object'){
+   state=out.state;
+   if(!Array.isArray(state.history))state.history=[];
+   if(!Array.isArray(state.transactions))state.transactions=[];
+   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(state));}catch(e){}
+   vdsCloudLoaded[site]=true;return true;
+ }
+ // First-use only: migrate this browser's existing V83 data once if cloud is empty.
+ const key=site==='dana'?'danaViharaState':'biddingViharaState';
+ const local=localStorage.getItem(key);
+ if(local){try{const parsed=JSON.parse(local);if(parsed&&typeof parsed==='object'){state=parsed;await vdsApi('save-state',{site,state});vdsCloudLoaded[site]=true;return true;}}catch(e){console.warn('Local migration skipped',e)}}
+ state=site==='dana'?JSON.parse(JSON.stringify(danaSeed)):JSON.parse(JSON.stringify(seed));
+ await vdsApi('save-state',{site,state});vdsCloudLoaded[site]=true;return true;
+}
+async function login(){
+ const n=document.getElementById('loginName').value.trim(),p=document.getElementById('loginPass').value,err=document.getElementById('loginError');
+ if(!n||!p){err.textContent='Masukkan username dan password.';err.style.display='block';return;}
+ const btn=document.querySelector('#login button.primary');if(btn){btn.disabled=true;btn.textContent='MEMERIKSA…';}
+ try{
+  const out=await vdsApi('login',{username:n,password:p},'');
+  vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
+  currentProfile=out.user;currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
+  // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
+  // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
+  accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
+  err.style.display='none';document.getElementById('login').style.display='none';
+  if(out.user.must_change_password){
+    const next=prompt('Ini login pertama. Buat password baru (minimal 8 karakter):');
+    if(!next||next.length<8){alert('Password baru minimal 8 karakter. Silakan login kembali setelah siap menggantinya.');logout();return;}
+    await vdsApi('change-password',{newPassword:next});
+    alert('Password berhasil diganti.');
+  }
+  if(!isAdmin()){
+   const canBidding=hasPermission('siteBidding'),canDana=hasPermission('siteDana');
+   if(canBidding!==canDana){await openSite(canBidding?'bidding':'dana');return;}
+   if(!canBidding&&!canDana){document.getElementById('sitePortal').style.display='grid';document.getElementById('portalGreeting').textContent='Login sebagai '+currentUser;document.getElementById('portalError').textContent='Akun ini belum diberi akses website. Hubungi Admin.';const bs=document.querySelectorAll('#sitePortal .loginbox>div button');bs.forEach(b=>b.style.display='none');setRoleUI();return;}
+  }
+  document.getElementById('sitePortal').style.display='grid';document.getElementById('portalGreeting').textContent='Login sebagai '+currentUser+' — pilih website yang ingin dibuka.';
+  const bs=document.querySelectorAll('#sitePortal .loginbox>div button');if(bs[0])bs[0].style.display=(!isAdmin()&&!hasPermission('siteBidding'))?'none':'';if(bs[1])bs[1].style.display=(!isAdmin()&&!hasPermission('siteDana'))?'none':'';
+  document.getElementById('portalError').textContent='';setRoleUI();
+ }catch(e){vdsAccessToken='';sessionStorage.removeItem('vds_access_token');currentProfile=null;currentUser='';currentRole='';document.getElementById('login').style.display='grid';err.textContent=e.message||'Login gagal. Periksa koneksi dan konfigurasi Supabase.';err.style.display='block';}
+ finally{if(btn){btn.disabled=false;btn.textContent='MASUK';}}
+}
+async function vdsLoadUsers(){
+ const out=await vdsApi('list-users');
+ accounts=(out.users||[]).map(u=>({...u,createdAt:u.created_at,password:undefined}));
+ window.__vdsUsersLoaded=true;
+ return accounts;
+}
+async function openSite(site, inNewTab=false){
+ if(site!=='bidding'&&site!=='dana')return;
+ // Perpindahan dari tombol Pilih Website membuka tab baru dengan handoff sesi.
+ const switchToNewTab=!inNewTab&&!!window.__switchWebsiteNewTab;
+ window.__switchWebsiteNewTab=false;
+ if(switchToNewTab){
+  const handoffKey='vdsWebsiteTabHandoff';
+  try{
+   localStorage.setItem(handoffKey,JSON.stringify({token:vdsAccessToken,username:currentUser,role:currentRole,profile:currentProfile,site:site,expires:Date.now()+60000}));
+  }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
+  const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
+  const opened=window.open(target,'_blank');
+  if(!opened){localStorage.removeItem(handoffKey);alert('Tab baru diblokir browser. Izinkan pop-up untuk website ini, lalu coba lagi.');}
+  return;
+ }
+ if(!isAdmin()&&!hasPermission(site==='bidding'?'siteBidding':'siteDana')){alert('Akses ke website ini belum diberikan oleh Admin.');return;}
+ currentSite=site;document.body.classList.toggle('site-dana',site==='dana');try{localStorage.setItem('vds_last_site',site);const saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'{}');saved.site=site;localStorage.setItem('vds_remembered_session',JSON.stringify(saved));}catch(e){}
+ // Tombol pindah website hanya tampil bila akun memang memiliki akses ke KEDUA website.
+ const switchBtn=document.getElementById('portalSwitchBtn');
+ if(switchBtn)switchBtn.style.display=(isAdmin()||(hasPermission('siteBidding')&&hasPermission('siteDana')))?'':'none';
+ vdsSyncNote('Memuat data '+(site==='dana'?'Dana Paramita':'Bidding')+'…',0);
+ try{
+  await vdsLoadCloud(site);
+  const sharedOut=await vdsApi('get-shared-inventory',{site});sharedInventory=sharedOut.inventory||{items:[],returns:[]};
+  vdsSyncNote('Data '+(site==='dana'?'Dana Paramita':'Bidding')+' berhasil dimuat',2200);
+ }catch(e){
+  vdsSyncNote('Gagal memuat data cloud',3500);
+  alert('Tidak dapat memuat data cloud: '+e.message+'\nData lokal tidak akan ditimpa.');
+  return;
+ }
+ invoiceBackground=localStorage.getItem(siteBgKey())||(site==='dana'?danaDefaultInvoiceBackground:defaultInvoiceBackground);
+ loadInvoiceBgView();
+ loadInvoiceLayoutForSite(site);
+ document.getElementById('sitePortal').style.display='none';document.getElementById('app').style.display='grid';
+ const title=site==='dana'?'DANA PARAMITA':'BIDDING 2026';
+ document.querySelector('.brand b').textContent=site==='dana'?'泰安廟 · DANA PARAMITA':'泰安廟 · BIDDING';
+ document.querySelector('.brand small').textContent=site==='dana'?'Yayasan Vihara Dharma Shanti Kundur':'Yayasan Vihara Dharma Shanti Tanjung Batu';
+ document.querySelector('.eyebrow').textContent=site==='dana'?'Sistem administrasi Dana Paramita':'Sistem administrasi bidding';
+ document.getElementById('pageTitle').textContent=title;
+ await vdsStartRealtime(site);
+ const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
+ setRoleUI();go('dashboard');
+}
+async function backToPortal(){
+ if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana')))return;
+ // Simpan snapshot website yang sedang dibuka SEBELUM currentSite berubah.
+ // Ini mencegah debounce save menulis data Bidding ke Dana (atau sebaliknya).
+ const previousSite=currentSite;
+ let previousState;
+ try{previousState=JSON.parse(JSON.stringify(state));}catch(e){previousState=state;}
+ try{localStorage.setItem(previousSite==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(previousState));}catch(e){}
+ clearTimeout(vdsSaveTimer);
+ // Tunggu request simpan yang sedang berjalan agar urutan simpan tetap aman.
+ while(vdsSaving)await new Promise(resolve=>setTimeout(resolve,50));
+ try{
+  if(vdsAccessToken&&previousSite)await vdsApi('save-state',{site:previousSite,state:previousState});
+ }catch(e){
+  alert('Data belum berhasil disimpan ke cloud. Website tidak akan ditutup.\n'+(e.message||e));
+  return;
+ }
+ vdsStopRealtime();
+ // Pilihan website berikutnya membuka tab baru, sesi login dibawa otomatis.
+ window.__switchWebsiteNewTab=true;
+ document.getElementById('app').style.display='none';
+ document.getElementById('sitePortal').style.display='grid';
+}
+function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
+function total(){return state.transactions.reduce((s,t)=>s+Number(t.total||0),0)}
+function paid(method){return state.transactions.filter(t=>t.payment===method).reduce((s,t)=>s+Number(t.total||0)+Number(t.overpay||0),0)}
+function unpaid(){return state.transactions.filter(t=>!t.payment).reduce((s,t)=>s+Number(t.total||0),0)}
+function cleanupPage(){
+ if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
+ return `<div class="panel">
+  <div class="panelhead"><div><h3>Persiapan sebelum operasional</h3><small>Hapus data testing tanpa menghapus master dan pengaturan.</small></div></div>
+  <div class="note" style="margin:12px 0">Data yang dikosongkan pada <b>Bidding</b> dan <b>Dana Paramita</b>: Live Bidding / Live Laporan Dana, History Bidding, serta nilai hasil bidding yang sedang berjalan.</div>
+  <div class="tablewrap"><table><thead><tr><th>Data</th><th>Tindakan</th></tr></thead><tbody>
+   <tr><td>Live Bidding</td><td>Dikosongkan; jumlah bid, total, dan sisa kembali ke nilai awal stok</td></tr>
+   <tr><td>History Bidding</td><td>Semua riwayat testing dihapus</td></tr>
+   <tr><td>Live Laporan Dana</td><td>Semua transaksi testing dihapus</td></tr>
+   <tr><td>Daftar Harga & Item</td><td><b>Tetap disimpan</b></td></tr>
+   <tr><td>Pengaturan nota, background, akun, hak akses, dan konfigurasi</td><td><b>Tetap disimpan</b></td></tr>
+  </tbody></table></div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+   <button class="danger" onclick="clearTestingData()">HAPUS DATA TESTING</button>
+   <span class="muted">Hanya Admin yang dapat menjalankan tindakan ini.</span>
+  </div>
+ </div>`;
+}
+function resetOperationalArrays(target){
+ target.transactions=[];
+ target.history=[];
+ if(Array.isArray(target.items)){
+  const priceByNo=new Map((target.prices||[]).map(p=>[String(p.no),p]));
+  target.items=target.items.map(item=>{
+   const master=priceByNo.get(String(item.no));
+   const stock=Number(master?.stock??item.stock??0);
+   return {...item,bid:0,remain:stock,sum:0,return:null};
+  });
+ }
+}
+async function clearTestingData(){
+ if(!isAdmin()){alert('Hanya Admin yang dapat menghapus data testing.');return;}
+ const ok=confirm('PERINGATAN: Semua Live Bidding, History Bidding, dan Live Laporan Dana pada KEDUA website akan dihapus. Daftar harga, item, akun, pengaturan nota, dan konfigurasi tetap disimpan. Lanjutkan?');
+ if(!ok)return;
+ const phrase=prompt('Untuk konfirmasi, ketik: HAPUS DATA TESTING');
+ if(phrase!=='HAPUS DATA TESTING'){alert('Dibatalkan. Teks konfirmasi tidak sesuai.');return;}
+ const btn=document.querySelector('#content button.danger');
+ if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
+ try{
+  for(const site of ['bidding','dana']){
+   const out=await vdsApi('get-state',{site});
+   let target=out.state&&typeof out.state==='object'?out.state:null;
+   if(!target){
+    const key=site==='dana'?'danaViharaState':'biddingViharaState';
+    try{target=JSON.parse(localStorage.getItem(key)||'null');}catch(e){target=null;}
+   }
+   if(!target)throw new Error('Data cloud '+site+' tidak ditemukan. Tidak ada data yang diubah pada website ini.');
+   resetOperationalArrays(target);
+   await vdsApi('save-state',{site,state:target});
+   try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(target));}catch(e){}
+   if(currentSite===site)state=target;
+  }
+  if(typeof vdsCloudLoaded==='object'){vdsCloudLoaded.bidding=true;vdsCloudLoaded.dana=true;}
+  render();
+  alert('Berhasil. Data Live Bidding, History Bidding, dan Live Laporan Dana pada kedua website sudah dikosongkan. Master data dan pengaturan tetap tersimpan.');
+ }catch(e){
+  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
+  console.error(e);
+ }finally{
+  const b=document.querySelector('#content button.danger');
+  if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}
+ }
+}
+function usersPage(){
+ if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
+ return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
+ <div class="tablewrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Hak Akses</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>
+ ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'?'':`<button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button>`}</td></tr>`).join('')}
+ </tbody></table></div><div class="note" style="margin-top:14px">Semua izin User secara default NONAKTIF. Centang hanya fitur yang boleh digunakan oleh akun tersebut. Admin selalu memiliki akses penuh.</div></div>`;
+}
+function showAddAccount(){
+ if(!isAdmin())return;
+ document.getElementById('modalTitle').textContent='Tambah Akun';
+ document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field full"><label>Username</label><input id="newUsername" autocomplete="off" placeholder="Contoh: petugas1"></div><div class="field"><label>Password</label><input id="newPassword" type="password" placeholder="Minimal 6 karakter"></div><div class="field"><label>Role</label><select id="newRole" onchange="toggleNewAccountPermissions()"><option value="user">User</option><option value="admin">Admin</option></select></div></div><div id="newPermissions"><div class="permission-heading">Izin fitur untuk User</div>${accountPermissionsMarkup({})}<small>Secara default semua fitur tidak diizinkan.</small></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="createAccount()">Simpan Akun</button></div>`;
+ document.getElementById('modal').classList.add('show');
+}
+function toggleNewAccountPermissions(){const role=document.getElementById('newRole').value;document.getElementById('newPermissions').style.display=role==='user'?'':'none';}
+function editAccountPermissions(i){
+ if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
+ const a=accounts[i];document.getElementById('modalTitle').textContent='Atur Izin Fitur — '+a.username;
+ document.getElementById('modalBody').innerHTML=`<p>Pilih fitur yang boleh diakses oleh akun <b>${esc(a.username)}</b>. Fitur yang tidak dicentang akan ditolak.</p>${accountPermissionsMarkup(a.permissions||{})}<div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveAccountPermissions(${i})">Simpan Izin</button></div>`;
+ document.getElementById('modal').classList.add('show');
+}
+async function saveAccountPermissions(i){
+ if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
+ const permissions=readPermissionChecks();
+ try{await vdsApi('update-user',{id:accounts[i].id,permissions});accounts[i].permissions=permissions;closeModal();render();alert('Izin fitur berhasil disimpan.');}
+ catch(e){alert('Gagal menyimpan izin: '+e.message);}
+}
+async function createAccount(){
+ if(!isAdmin())return;
+ const username=document.getElementById('newUsername').value.trim(),password=document.getElementById('newPassword').value,role=document.getElementById('newRole').value;
+ if(!/^[a-zA-Z0-9._-]{3,24}$/.test(username)){alert('Username harus 3–24 karakter.');return;}
+ if(accounts.some(a=>a.username.toLowerCase()===username.toLowerCase())){alert('Username sudah digunakan.');return;}
+ if(password.length<6){alert('Password minimal 6 karakter.');return;}
+ const permissions={};permissionCatalog.forEach(x=>permissions[x.key]=false);document.querySelectorAll('.account-permission').forEach(el=>permissions[el.value]=el.checked);if(role==='admin')permissionCatalog.forEach(x=>permissions[x.key]=true);
+ try{await vdsApi('create-user',{username,password,role,permissions});await vdsLoadUsers();closeModal();render();alert('Akun '+username+' berhasil dibuat di Supabase.');}
+ catch(e){alert('Gagal membuat akun: '+e.message);}
+}
+async function toggleAccount(i){if(!isAdmin()||!accounts[i]||accounts[i].username===currentUser)return;const active=accounts[i].active===false;try{await vdsApi('update-user',{id:accounts[i].id,active});accounts[i].active=active;render();}catch(e){alert(e.message)}}
+async function changeAccountPassword(i){
+ if(!isAdmin()||!accounts[i])return;const next=prompt('Masukkan password baru untuk '+accounts[i].username+' (minimal 6 karakter):');if(next===null)return;if(next.length<6){alert('Password minimal 6 karakter.');return;}
+ try{await vdsApi('reset-password',{id:accounts[i].id,password:next});alert('Password direset. Pengguna wajib menggantinya saat login berikutnya.');}catch(e){alert('Gagal reset password: '+e.message)}
+}
+function go(p){
+ if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
+ if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):p==='inventory'?(hasPermission('inventory')||hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
+ currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
+ const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',inventory:'Tambah & Retur Barang',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
+ document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
+ if(p==='users'&&!window.__vdsUsersLoaded){
+  document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
+  if(!window.__vdsUsersLoading){window.__vdsUsersLoading=true;vdsLoadUsers().then(()=>{window.__vdsUsersLoading=false;if(currentPage==='users')render();}).catch(e=>{window.__vdsUsersLoading=false;document.getElementById('content').innerHTML='<div class="panel">Gagal memuat akun: '+esc(e.message||'Kesalahan koneksi')+'</div>';});}
+  return;
+ }
+ render();
+ if(p==='inventory')refreshSharedInventory();
+}
+function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory')c.innerHTML=inventoryPage();if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
 // Restore the previous login on a new visit/reload. The saved access token is
 // validated against the cloud before the application is opened.
 async function vdsRestoreRememberedSession(){
+ if(window.__vdsHandoffHandled)return;
  const token=localStorage.getItem('vds_access_token')||'';
  let saved=null;try{saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'null')}catch(e){}
  if(!token||!saved||!saved.username||!saved.profile)return;
