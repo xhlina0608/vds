@@ -1620,7 +1620,8 @@ async function changeAccountPassword(i){
  try{await vdsApi('reset-password',{id:accounts[i].id,password:next});alert('Password direset. Pengguna wajib menggantinya saat login berikutnya.');}catch(e){alert('Gagal reset password: '+e.message)}
 }
 function go(p){if(p==='dashboard')p='transactions';
- if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}\n if(p==='history'&&!isAdmin()){alert('History Bidding hanya bisa diakses Admin.');return;}
+ if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
+ if(p==='history'&&!isAdmin()){alert('History Bidding hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):p==='inventory'?(hasPermission('inventory')||hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
  const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',inventory:'Tambah & Retur Barang',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
