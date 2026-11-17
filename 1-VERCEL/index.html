@@ -1499,23 +1499,30 @@ async function clearTestingData(){
  const btn=document.querySelector('#content button.danger');
  if(btn){btn.disabled=true;btn.textContent='Menghapus data…';}
  try{
-  // Cancel queued local writes and wait for an active save before issuing the reset.
   clearTimeout(vdsSaveTimer);vdsSaveAgain=false;
-  while(vdsSaving) await new Promise(resolve=>setTimeout(resolve,100));
+  // Do not wait forever on a stale saving flag. The server reset is authoritative.
+  const waitStart=Date.now();
+  while(vdsSaving && Date.now()-waitStart<8000) await new Promise(resolve=>setTimeout(resolve,100));
+  if(vdsSaving) throw new Error('Masih ada proses penyimpanan yang belum selesai. Refresh halaman lalu coba sekali lagi.');
+  const results=[];
   for(const site of ['bidding','dana']){
-   await vdsApi('admin-clear-testing-data',{site});
+   const reset=await vdsApi('admin-clear-testing-data',{site});
+   if(!reset?.ok || reset.transactions!==0 || reset.history!==0 || !reset.reset_at)
+    throw new Error('Server belum mengonfirmasi penghapusan '+site+'.');
    const out=await vdsApi('get-state',{site});
-   if(!out?.state)throw new Error('Verifikasi data cloud '+site+' gagal.');
+   if(!out?.state || (out.state.transactions||[]).length!==0 || (out.state.history||[]).length!==0 || !out.state._testing_reset_at)
+    throw new Error('Verifikasi cloud '+site+' gagal. Data belum dinyatakan terhapus.');
    try{localStorage.setItem(site==='dana'?'danaViharaState':'biddingViharaState',JSON.stringify(out.state));}catch(e){}
    if(currentSite===site)state=out.state;
    if(typeof vdsCloudLoaded==='object')vdsCloudLoaded[site]=true;
+   results.push(site==='dana'?'Dana Paramita':'Bidding');
   }
   vdsSaveAgain=false;clearTimeout(vdsSaveTimer);
   render();
-  alert('Berhasil. Transaksi dan history testing pada kedua website sudah dihapus dan diverifikasi dari cloud. Daftar Harga & Item, stok, akun, serta pengaturan tetap disimpan.');
+  alert('Berhasil. Data testing Bidding dan Dana Paramita sudah kosong dan diverifikasi dari Supabase.');
  }catch(e){
-  alert('Penghapusan belum selesai: '+(e.message||e)+'. Periksa koneksi cloud sebelum mencoba lagi.');
-  console.error(e);
+  alert('Penghapusan belum berhasil: '+(e.message||e));
+  console.error('Hapus data testing gagal:',e);
  }finally{
   const b=document.querySelector('#content button.danger');
   if(b){b.disabled=false;b.textContent='HAPUS DATA TESTING';}

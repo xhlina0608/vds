@@ -282,11 +282,11 @@ Deno.serve(async (req) => {
       const site = normalizeSite(body);
       if (site !== "bidding" && site !== "dana")
         return reply({ error: "Website tidak valid." }, 400);
-      await requireSiteAccess(req, site);
-      const actor = await getActor(req);
-      if (String(actor.profile?.role || "").toLowerCase() !== "admin")
+      const actor = await requireSiteAccess(req, site);
+      if (!isAdmin(actor.profile))
         return reply({ error: "Hanya Admin yang dapat menghapus data testing." }, 403);
 
+      // Read current cloud payload, preserving master data and all settings.
       const { data: current, error: readError } = await adminDb.from("app_state")
         .select("payload").eq("site", site).maybeSingle();
       if (readError) throw readError;
@@ -296,23 +296,16 @@ Deno.serve(async (req) => {
       const payload: Record<string, any> = { ...current.payload };
       payload.transactions = [];
       payload.history = [];
+      // Reset bidding counters while retaining the master item and stock values.
       if (Array.isArray(payload.items)) {
-        const priceByNo = new Map((payload.prices || []).map((p: any) => [String(p.no), p]));
-        payload.items = payload.items.map((item: any) => {
-          const master = priceByNo.get(String(item.no));
-          const stock = Number(master?.stock ?? item.stock ?? 0);
-          return { ...item, bid: 0, remain: stock, sum: 0, return: null };
-        });
+        payload.items = payload.items.map((item: any) => ({
+          ...item, bid: 0, sum: 0, return: null,
+          remain: Number(item.remain ?? item.stock ?? 0)
+        }));
       }
-      // Reset marker prevents stale browser snapshots from restoring deleted rows.
       payload._testing_reset_at = new Date().toISOString();
 
-      const { error: saveError } = await adminDb.from("app_state").upsert({
-        site, payload, updated_by: actor.user.id, updated_at: new Date().toISOString()
-      }, { onConflict: "site" });
-      if (saveError) throw saveError;
-
-      // Remove old transaction events but retain the latest inventory snapshot.
+      // Clear old replayable transaction events. Keep only the newest inventory snapshot.
       const { data: snapshots, error: snapshotReadError } = await adminDb.from("vds_sync_events")
         .select("event_payload").eq("site", site)
         .contains("event_payload", { kind: "site_inventory_snapshot", site })
@@ -327,7 +320,20 @@ Deno.serve(async (req) => {
         });
         if (restoreSnapshotError) throw restoreSnapshotError;
       }
-      return reply({ ok: true, site, message: "Transaksi dan history testing berhasil dihapus." });
+
+      // Direct UPDATE deliberately bypasses merge_vds_app_state array-union behavior.
+      const { data: saved, error: saveError } = await adminDb.from("app_state")
+        .update({ payload, updated_by: actor.user.id, updated_at: new Date().toISOString() })
+        .eq("site", site).select("payload").single();
+      if (saveError) throw saveError;
+      const txCount = Array.isArray(saved?.payload?.transactions) ? saved.payload.transactions.length : -1;
+      const historyCount = Array.isArray(saved?.payload?.history) ? saved.payload.history.length : -1;
+      const resetAt = saved?.payload?._testing_reset_at;
+      if (txCount !== 0 || historyCount !== 0 || !resetAt)
+        throw new Error("Verifikasi reset gagal: data cloud belum kosong.");
+
+      return reply({ ok: true, site, reset_at: resetAt, transactions: txCount, history: historyCount,
+        message: "Data testing berhasil dihapus dan diverifikasi langsung dari database." });
     }
 
     if (action === "admin-clear-all-operational-data") {
