@@ -222,7 +222,6 @@ const permissionCatalog=[
  {key:'inventory',label:'Tambah & Retur Barang'},
  {key:'invoice',label:'Nota / Invoice (lihat dan print)'},
  {key:'invoiceDesign',label:'Edit Design Nota dan Background'},
- {key:'history',label:'History Bidding'},
  {key:'details',label:'Rincian Dana'},
  {key:'cashEdit',label:'Edit nominal uang cash manual'},
  {key:'exportExcel',label:'Export Excel'},
@@ -251,7 +250,7 @@ function setRoleUI(){
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
  const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',inventory:'inventory',details:'details'};
- document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];const allowed=el.dataset.page==='cleanup'?isAdmin():(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
+ document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];const allowed=(el.dataset.page==='cleanup'||el.dataset.page==='history')?isAdmin():(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
  document.getElementById('who').textContent=currentUser+' · '+(isAdmin()?'ADMIN':'USER');
@@ -1621,7 +1620,7 @@ async function changeAccountPassword(i){
  try{await vdsApi('reset-password',{id:accounts[i].id,password:next});alert('Password direset. Pengguna wajib menggantinya saat login berikutnya.');}catch(e){alert('Gagal reset password: '+e.message)}
 }
 function go(p){if(p==='dashboard')p='transactions';
- if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
+ if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}\n if(p==='history'&&!isAdmin()){alert('History Bidding hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):p==='inventory'?(hasPermission('inventory')||hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
  const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',inventory:'Tambah & Retur Barang',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
