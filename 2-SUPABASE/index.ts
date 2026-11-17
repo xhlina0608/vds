@@ -278,6 +278,58 @@ Deno.serve(async (req) => {
       return reply({ ok: true, inventory: cleanInventory });
     }
 
+    if (action === "admin-clear-testing-data") {
+      const site = normalizeSite(body);
+      if (site !== "bidding" && site !== "dana")
+        return reply({ error: "Website tidak valid." }, 400);
+      await requireSiteAccess(req, site);
+      const actor = await getActor(req);
+      if (String(actor.profile?.role || "").toLowerCase() !== "admin")
+        return reply({ error: "Hanya Admin yang dapat menghapus data testing." }, 403);
+
+      const { data: current, error: readError } = await adminDb.from("app_state")
+        .select("payload").eq("site", site).maybeSingle();
+      if (readError) throw readError;
+      if (!current?.payload || typeof current.payload !== "object")
+        return reply({ error: "Data website tidak ditemukan; penghapusan dibatalkan." }, 404);
+
+      const payload: Record<string, any> = { ...current.payload };
+      payload.transactions = [];
+      payload.history = [];
+      if (Array.isArray(payload.items)) {
+        const priceByNo = new Map((payload.prices || []).map((p: any) => [String(p.no), p]));
+        payload.items = payload.items.map((item: any) => {
+          const master = priceByNo.get(String(item.no));
+          const stock = Number(master?.stock ?? item.stock ?? 0);
+          return { ...item, bid: 0, remain: stock, sum: 0, return: null };
+        });
+      }
+      // Reset marker prevents stale browser snapshots from restoring deleted rows.
+      payload._testing_reset_at = new Date().toISOString();
+
+      const { error: saveError } = await adminDb.from("app_state").upsert({
+        site, payload, updated_by: actor.user.id, updated_at: new Date().toISOString()
+      }, { onConflict: "site" });
+      if (saveError) throw saveError;
+
+      // Remove old transaction events but retain the latest inventory snapshot.
+      const { data: snapshots, error: snapshotReadError } = await adminDb.from("vds_sync_events")
+        .select("event_payload").eq("site", site)
+        .contains("event_payload", { kind: "site_inventory_snapshot", site })
+        .order("id", { ascending: false }).limit(1);
+      if (snapshotReadError) throw snapshotReadError;
+      const { error: deleteEventsError } = await adminDb.from("vds_sync_events")
+        .delete().eq("site", site);
+      if (deleteEventsError) throw deleteEventsError;
+      if (snapshots?.[0]?.event_payload) {
+        const { error: restoreSnapshotError } = await adminDb.from("vds_sync_events").insert({
+          site, event_payload: snapshots[0].event_payload
+        });
+        if (restoreSnapshotError) throw restoreSnapshotError;
+      }
+      return reply({ ok: true, site, message: "Transaksi dan history testing berhasil dihapus." });
+    }
+
     if (action === "admin-clear-all-operational-data") {
       const site = normalizeSite(body);
       if (site !== "bidding" && site !== "dana")
