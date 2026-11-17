@@ -203,6 +203,42 @@ Deno.serve(async (req) => {
       return reply({ ok: true, events: data || [] });
     }
 
+    if (action === "get-shared-inventory" || action === "save-shared-inventory") {
+      const site = normalizeSite(body);
+      await requireSiteAccess(req, site);
+      // Store snapshots in the existing sync-events table, not app_state.
+      // This keeps the inventory truly shared without touching either website's
+      // bidding/dana state or requiring a database migration.
+      if (action === "get-shared-inventory") {
+        const { data, error } = await adminDb.from("vds_sync_events")
+          .select("event_payload").eq("site", "bidding")
+          .contains("event_payload", { kind: "shared_inventory_snapshot" })
+          .order("id", { ascending: false }).limit(1).maybeSingle();
+        if (error) throw error;
+        const inventory = data?.event_payload?.inventory;
+        return reply({ ok: true, inventory: inventory && typeof inventory === "object"
+          ? inventory : { items: [], returns: [] } });
+      }
+      const actor = await getActor(req);
+      const incoming = body.inventory;
+      if (!incoming || typeof incoming !== "object" || !Array.isArray(incoming.items) || !Array.isArray(incoming.returns))
+        return reply({ error: "Format data barang tidak valid." }, 400);
+      if (incoming.items.length > 5000 || incoming.returns.length > 20000)
+        return reply({ error: "Jumlah data barang melebihi batas." }, 400);
+      const cleanInventory = {
+        items: incoming.items,
+        returns: incoming.returns,
+        updated_at: new Date().toISOString(),
+        updated_by: String(actor.profile.username || "")
+      };
+      const { error } = await adminDb.from("vds_sync_events").insert({
+        site: "bidding",
+        event_payload: { kind: "shared_inventory_snapshot", inventory: cleanInventory }
+      });
+      if (error) throw error;
+      return reply({ ok: true, inventory: cleanInventory });
+    }
+
     if (action === "get-state" || action === "save-state") {
       const site = normalizeSite(body);
       const actor = await requireSiteAccess(req, site);
@@ -211,7 +247,7 @@ Deno.serve(async (req) => {
         if (error) throw error;
         return reply({ ok: true, state: data?.payload ?? null, updated_at: data?.updated_at ?? null });
       }
-      const payload = body.state;
+      let payload = body.state;
       if (!payload || typeof payload !== "object") return reply({ error: "Data state tidak valid." }, 400);
       // Atomic server-side merge: concurrent users may submit stale snapshots.
       // The SQL RPC unions transactions/history by id under the row lock, so a

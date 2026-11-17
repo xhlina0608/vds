@@ -103,6 +103,7 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <button data-page="invoice" onclick="go('invoice')"><span>▧</span>Nota / Invoice</button>
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
 <button data-page="prices" onclick="go('prices')"><span>◇</span>Daftar Harga &amp; Item</button>
+<button data-page="inventory" onclick="go('inventory')"><span>⇄</span>Tambah &amp; Retur Barang</button>
 <button data-page="details" onclick="go('details')"><span>∑</span>Rincian Dana</button>
 <button data-page="cleanup" onclick="go('cleanup')" class="admin-only" style="display:none"><span>⌫</span>Bersihkan Data Testing</button>
 </nav><div class="userbox">LOGIN SEBAGAI <b id="who">Pengguna</b><button class="soft" style="margin-top:10px;width:100%" onclick="logout()">Keluar</button></div></aside>
@@ -220,6 +221,7 @@ const permissionCatalog=[
  {key:'dashboard',label:'Dashboard'},
  {key:'transactions',label:'Live Bidding'},
  {key:'prices',label:'Daftar Harga & Item (lihat, tambah, edit, hapus)'},
+ {key:'inventory',label:'Tambah & Retur Barang'},
  {key:'invoice',label:'Nota / Invoice (lihat dan print)'},
  {key:'invoiceDesign',label:'Edit Design Nota dan Background'},
  {key:'history',label:'History Bidding'},
@@ -250,7 +252,7 @@ function setRoleUI(){
  if(isAdmin()&&!accountBtn){accountBtn=document.createElement('button');accountBtn.id='accountNav';accountBtn.dataset.page='users';accountBtn.innerHTML='<span>♙</span>Manajemen Akun';accountBtn.onclick=()=>go('users');nav.appendChild(accountBtn);}
  if(!isAdmin()&&accountBtn)accountBtn.remove();
  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
- const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',details:'details'};
+ const pageMap={dashboard:'dashboard',transactions:'transactions',invoice:'invoice',history:'history',prices:'prices',items:'items',inventory:'inventory',details:'details'};
  document.querySelectorAll('#nav button[data-page]').forEach(el=>{const k=pageMap[el.dataset.page];const allowed=el.dataset.page==='cleanup'?isAdmin():(isAdmin()||hasPermission(k));el.style.display=allowed?'':'none';});
  const ex=document.querySelector('button[onclick="exportExcel()"]');if(ex)ex.style.display=isAdmin()?'':'none';
  const pdf=document.querySelector('button[onclick="exportPDF()"]');if(pdf)pdf.style.display=isAdmin()?'':'none';
@@ -263,7 +265,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function refreshCloud(){
  if(!vdsAccessToken||document.getElementById('app').style.display==='none')return;
  if(!confirm('Muat ulang data dari cloud? Perubahan lokal yang belum tersimpan akan diganti.'))return;
- try{await vdsLoadCloud(currentSite);render();vdsSyncNote('Data cloud berhasil dimuat');}
+ try{await vdsLoadCloud(currentSite);if(currentPage==='inventory'){const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};}render();vdsSyncNote('Data cloud berhasil dimuat');}
  catch(e){alert('Gagal memuat cloud: '+e.message)}
 }
 function persist(){
@@ -304,6 +306,56 @@ function deleteCatalogItem(i){
  persist();render();
 }
 function tablePage(title,heads,rows,key,fields,type){const allowed=isAdmin()||hasPermission(type==='price'?'prices':type==='item'?'items':'sponsors');return `<div class="panel"><div class="panelhead"><h3>${title}</h3><div class="toolbar"><input placeholder="Cari..." oninput="filterTable(this)"><button class="primary" onclick="addRow('${type}')" ${allowed?'':'style="display:none"'}>+ Tambah Data</button></div></div><div class="tablewrap"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}<th>Aksi</th></tr></thead><tbody id="dataRows">${rows.map((r,i)=>`<tr>${fields.map(f=>`<td>${esc(r[f]??'')}</td>`).join('')}<td><button class="soft" onclick="editRow('${type}',${i})" ${allowed?'':'style="display:none"'}>Edit</button></td></tr>`).join('')}</tbody></table></div></div>`}
+let sharedInventory={items:[],returns:[],updated_at:null};
+let sharedInventoryBusy=false;
+function inventoryPage(){
+ const products=Array.isArray(sharedInventory.items)?sharedInventory.items:[];
+ const returns=Array.isArray(sharedInventory.returns)?sharedInventory.returns:[];
+ const options=products.filter(x=>Number(x.availableQty||0)>0).map(x=>`<option value="${esc(x.id)}">${esc(x.name)} — tersedia ${Number(x.availableQty||0)} ${esc(x.unit||'unit')}</option>`).join('');
+ return `<div class="cards"><div class="card"><small>Jenis Barang</small><strong>${products.length}</strong></div><div class="card"><small>Total Stok Tersedia</small><strong>${products.reduce((n,x)=>n+Number(x.availableQty||0),0)}</strong></div><div class="card"><small>Total Retur</small><strong>${returns.length}</strong></div><div class="card"><small>Jumlah Diretur</small><strong>${returns.reduce((n,x)=>n+Number(x.qty||0),0)}</strong></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Fitur bersama untuk Website Bidding dan Dana Paramita. Data tersimpan di cloud dan tampil di kedua website.</small></div><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div>
+ <div class="formgrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+ <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Nama Barang</label><input id="invAddName" placeholder="Nama barang"></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Satuan</label><input id="invAddUnit" placeholder="Contoh: pcs, dus, kg" value="pcs"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy?'disabled':''}>Simpan Barang</button></div>
+ <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang tersedia</option>${options}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Isi jumlah barang yang benar-benar tersisa setelah kegiatan.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Alasan Retur</label><select id="invReturnReason"><option value="Barang sisa / tidak terjual">Barang sisa / tidak terjual</option><option value="Barang rusak">Barang rusak</option><option value="Dikembalikan ke pemasok">Dikembalikan ke pemasok</option><option value="Lainnya">Lainnya</option></select></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!products.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Jumlah tersedia berkurang otomatis saat barang diretur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Jumlah Masuk</th><th>Sudah Diretur</th><th>Tersedia</th><th>Satuan</th><th>Keterangan</th></tr></thead><tbody>${products.length?products.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.name)}</b></td><td>${Number(x.totalQty||0)}</td><td>${Number(x.returnedQty||0)}</td><td><b>${Number(x.availableQty||0)}</b></td><td>${esc(x.unit||'pcs')}</td><td>${esc(x.notes||'-')}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada barang. Gunakan form Tambah Barang.</td></tr>'}</tbody></table></div></div>
+ <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur dari kedua website.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Alasan</th><th>Petugas</th><th>Website</th><th>Keterangan</th></tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.reason||'-')}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td></tr>`).join(''):'<tr><td colspan="7" class="empty">Belum ada riwayat retur.</td></tr>'}</tbody></table></div></div>`;
+}
+function syncInventoryRemaining(){
+ const id=document.getElementById('invReturnItem')?.value||'';
+ const item=(sharedInventory.items||[]).find(x=>x.id===id);
+ const field=document.getElementById('invReturnRemaining');
+ if(field)field.value=String(Number(item?.availableQty||0));
+}
+async function refreshSharedInventory(){
+ try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};render();vdsSyncNote('Data barang bersama berhasil diperbarui');}
+ catch(e){alert('Gagal memuat data barang: '+e.message);}
+}
+async function saveSharedInventory(next){
+ if(sharedInventoryBusy)return false;sharedInventoryBusy=true;vdsSyncNote('Menyimpan data barang…',0);
+ try{const out=await vdsApi('save-shared-inventory',{site:currentSite,inventory:next});sharedInventory=out.inventory||next;vdsSyncNote('Data barang tersimpan di cloud');return true;}
+ catch(e){alert('Gagal menyimpan data barang: '+e.message);vdsSyncNote('Gagal menyimpan data barang',3000);return false;}
+ finally{sharedInventoryBusy=false;}
+}
+async function addInventoryItem(){
+ if(!(isAdmin()||hasPermission('inventory')||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}
+ const name=document.getElementById('invAddName')?.value.trim().toLocaleUpperCase('id-ID')||'';
+ const qty=Number(document.getElementById('invAddQty')?.value||0),unit=document.getElementById('invAddUnit')?.value.trim()||'pcs',notes=document.getElementById('invAddNote')?.value.trim()||'';
+ if(!name){alert('Masukkan nama barang.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah masuk minimal 1.');return;}
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];
+ const existing=next.items.find(x=>String(x.name||'').toLowerCase()===name.toLowerCase()&&String(x.unit||'pcs').toLowerCase()===unit.toLowerCase());
+ if(existing){existing.totalQty=Number(existing.totalQty||0)+qty;existing.availableQty=Number(existing.availableQty||0)+qty;existing.notes=notes||existing.notes||'';existing.updatedAt=new Date().toISOString();}
+ else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),name,totalQty:qty,returnedQty:0,availableQty:qty,unit,notes,createdAt:new Date().toISOString()});
+ if(await saveSharedInventory(next)){render();}
+}
+async function returnInventoryItem(){
+ if(!(isAdmin()||hasPermission('inventory')||hasPermission('prices')||hasPermission('items'))){alert('Akses ditolak.');return;}
+ const id=document.getElementById('invReturnItem')?.value||'',remaining=Number(document.getElementById('invReturnRemaining')?.value||0),qty=Number(document.getElementById('invReturnQty')?.value||0),reason=document.getElementById('invReturnReason')?.value||'',notes=document.getElementById('invReturnNote')?.value.trim()||'';
+ const next=JSON.parse(JSON.stringify(sharedInventory));const item=(next.items||[]).find(x=>x.id===id);
+ if(!item){alert('Pilih barang yang akan diretur.');return;}if(!Number.isInteger(remaining)||remaining<0||remaining>Number(item.availableQty||0)){alert('Jumlah sisa harus 0 sampai '+Number(item.availableQty||0)+'.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah retur minimal 1.');return;}if(qty>remaining){alert('Jumlah retur tidak boleh melebihi sisa barang ('+remaining+').');return;}
+ item.availableQty=remaining-qty;item.returnedQty=Number(item.returnedQty||0)+qty;
+ next.returns=Array.isArray(next.returns)?next.returns:[];next.returns.push({id:'ret-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:item.id,itemName:item.name,qty,reason,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
+ if(await saveSharedInventory(next)){render();}
+}
 function transactionSortValue(value){const digits=String(value??'').replace(/[^0-9]/g,'');return digits?Number(digits):Number.MAX_SAFE_INTEGER;}
 function sortedTransactionsByOrder(rows=state.transactions){return [...(rows||[])].sort((a,b)=>{const an=transactionSortValue(a.bidNo),bn=transactionSortValue(b.bidNo);if(an!==bn)return an-bn;const ai=transactionSortValue(a.invoice),bi=transactionSortValue(b.invoice);if(ai!==bi)return ai-bi;return String(a.createdAt||'').localeCompare(String(b.createdAt||''));});}
 function transactionTable(rows){if(!rows.length)return '<div class="empty">Belum ada transaksi. Klik Tambah Transaksi untuk mulai.</div>';return `<div class="tablewrap"><table><thead><tr><th>No. Nota</th><th>${currentSite==='dana'?'ORDER NO':'BID NO'}</th><th>Nama Barang</th><th>Bidder</th><th>Nominal</th><th>Qty</th><th>Total</th><th>Petugas</th><th>Pembayaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(t=>`<tr><td>${t.invoice}</td><td>${esc(t.bidNo)}</td><td>${esc(t.itemName)}</td><td>${esc(t.bidder)}</td><td>${money(t.price)}</td><td>${t.qty}</td><td><b>${money(t.total)}</b></td><td>${esc(t.staff||'-')}</td><td><span class="pill ${t.payment?'paid':'unpaid'}">${t.payment||'BELUM BAYAR'}</span></td><td><button class="primary" onclick="showPaymentOptions('${t.id}')">${t.payment?'Ganti Bayar':'BAYAR'}</button> <button class="soft" onclick="editTransaction('${t.id}')">Edit</button> <button class="soft" onclick="openInvoice('${t.id}')">Nota</button></td></tr>`).join('')}</tbody></table></div>`}
@@ -1170,6 +1222,7 @@ async function openSite(site, inNewTab=false){
  vdsSyncNote('Memuat data '+(site==='dana'?'Dana Paramita':'Bidding')+'…',0);
  try{
   await vdsLoadCloud(site);
+  const sharedOut=await vdsApi('get-shared-inventory',{site});sharedInventory=sharedOut.inventory||{items:[],returns:[]};
   vdsSyncNote('Data '+(site==='dana'?'Dana Paramita':'Bidding')+' berhasil dimuat',2200);
  }catch(e){
   vdsSyncNote('Gagal memuat data cloud',3500);
@@ -1322,9 +1375,9 @@ async function changeAccountPassword(i){
 }
 function go(p){
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
- if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
+ if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):p==='inventory'?(hasPermission('inventory')||hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
- const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
+ const names={dashboard:'Dashboard',prices:'Daftar Harga & Item',items:'Daftar Harga & Item',inventory:'Tambah & Retur Barang',transactions:currentSite==='dana'?'Live Laporan Dana':'Live Bidding',invoice:'Nota / Invoice',details:'Rincian Dana',history:'History Bidding',users:'Manajemen Akun',cleanup:'Bersihkan Data Testing'};
  document.getElementById('pageTitle').textContent=names[p]||'Dashboard';
  if(p==='users'&&!window.__vdsUsersLoaded){
   document.getElementById('content').innerHTML='<div class="panel">Memuat daftar akun…</div>';
@@ -1332,8 +1385,9 @@ function go(p){
   return;
  }
  render();
+ if(p==='inventory')refreshSharedInventory();
 }
-function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
+function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory')c.innerHTML=inventoryPage();if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
 // Restore the previous login on a new visit/reload. The saved access token is
 // validated against the cloud before the application is opened.
 async function vdsRestoreRememberedSession(){

@@ -1,12 +1,11 @@
-CARA UPLOAD VDS - HAPUS FITUR SPONSOR
+1) Extract ZIP.
+2) GitHub: replace index.html pada root repository, lalu Commit.
+3) Supabase: replace supabase/functions/vds-api/index.ts, lalu deploy ulang Edge Function vds-api.
+4) Tunggu Vercel dan Supabase selesai deploy.
+5) Buka vds.onesolution.my.id, refresh paksa (Ctrl+Shift+R), lalu login.
+6) Menu "Tambah & Retur Barang" muncul di Website Bidding dan Dana Paramita.
+7) Coba tambah barang uji, lalu pindah website. Pastikan barang yang sama terlihat.
+8) Saat retur, isi jumlah sisa setelah bidding terlebih dahulu, lalu jumlah yang akan diretur. Jumlah retur tidak boleh melebihi sisa tersebut.
+9) Gunakan nama TEST untuk uji coba; fitur hapus barang belum disediakan.
 
-1. Backup repository GitHub terlebih dahulu.
-2. Buka ZIP ini dan ambil index.html.
-3. Di repository GitHub VDS, buka index.html pada ROOT repository (bukan subfolder).
-4. Replace seluruh isi/file index.html dengan file dari ZIP ini.
-5. Commit perubahan.
-6. Tunggu Vercel deployment Production selesai.
-7. Buka website dan tekan Ctrl+Shift+R.
-
-JANGAN menjalankan SQL migration. JANGAN menghapus tabel app_state atau data transaksi.
-Data sponsor lama di Supabase tidak dihapus; hanya fitur/menu aplikasinya yang dihilangkan.
+Tidak perlu SQL migration.
