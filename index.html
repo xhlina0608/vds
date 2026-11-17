@@ -98,7 +98,6 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 <div id="app" class="layout" style="display:none">
 <aside class="side"><div class="brand"><b>泰安廟 · BIDDING</b><small>Yayasan Vihara Dharma Shanti Tanjung Batu</small></div>
 <nav class="nav" id="nav">
-<button data-page="dashboard" class="active" onclick="go('dashboard')"><span>▦</span>Dashboard</button>
 <button data-page="transactions" onclick="go('transactions')"><span>↗</span>Live Bidding</button>
 <button data-page="invoice" onclick="go('invoice')"><span>▧</span>Nota / Invoice</button>
 <button data-page="history" onclick="go('history')"><span>◷</span>History Bidding</button>
@@ -218,7 +217,6 @@ function isAdmin(){const roles=[currentRole,currentProfile?.role,currentProfile?
 const permissionCatalog=[
  {key:'siteBidding',label:'Akses Website Bidding'},
  {key:'siteDana',label:'Akses Website Dana Paramita'},
- {key:'dashboard',label:'Dashboard'},
  {key:'transactions',label:'Live Bidding'},
  {key:'prices',label:'Daftar Harga & Item (lihat, tambah, edit, hapus)'},
  {key:'inventory',label:'Tambah & Retur Barang'},
@@ -1427,7 +1425,7 @@ async function openSite(site, inNewTab=false){
  document.getElementById('pageTitle').textContent=title;
  await vdsStartRealtime(site);
  const liveNav=document.querySelector('.nav button[data-page="transactions"]');if(liveNav)liveNav.innerHTML='<span>↗</span>'+(site==='dana'?'Live Laporan Dana':'Live Bidding');
- setRoleUI();go('dashboard');
+ setRoleUI();go('transactions');
 }
 async function backToPortal(){
  if(!isAdmin()&&!(hasPermission('siteBidding')&&hasPermission('siteDana')))return;
@@ -1622,7 +1620,7 @@ async function changeAccountPassword(i){
  if(!isAdmin()||!accounts[i])return;const next=prompt('Masukkan password baru untuk '+accounts[i].username+' (minimal 6 karakter):');if(next===null)return;if(next.length<6){alert('Password minimal 6 karakter.');return;}
  try{await vdsApi('reset-password',{id:accounts[i].id,password:next});alert('Password direset. Pengguna wajib menggantinya saat login berikutnya.');}catch(e){alert('Gagal reset password: '+e.message)}
 }
-function go(p){
+function go(p){if(p==='dashboard')p='transactions';
  if(p==='users'&&!isAdmin()){alert('Menu ini hanya bisa diakses Admin.');return;}
  if(p!=='users'&&!isAdmin()&&!(p==='prices'?(hasPermission('prices')||hasPermission('items')):p==='inventory'?(hasPermission('inventory')||hasPermission('prices')||hasPermission('items')):hasPermission(p))){alert('Akses ditolak. Admin belum memberikan izin untuk fitur ini.');return;}
  currentPage=p;document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
