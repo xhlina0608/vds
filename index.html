@@ -265,7 +265,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function refreshCloud(){
  if(!vdsAccessToken||document.getElementById('app').style.display==='none')return;
  if(!confirm('Muat ulang data dari cloud? Perubahan lokal yang belum tersimpan akan diganti.'))return;
- try{await vdsLoadCloud(currentSite);if(currentPage==='inventory'){const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};}render();vdsSyncNote('Data cloud berhasil dimuat');}
+ try{await vdsLoadCloud(currentSite);if(currentPage==='inventory'){const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[],additions:[]};sharedInventory.additions=Array.isArray(sharedInventory.additions)?sharedInventory.additions:[];}render();vdsSyncNote('Data cloud berhasil dimuat');}
  catch(e){alert('Gagal memuat cloud: '+e.message)}
 }
 function persist(){
@@ -306,7 +306,7 @@ function deleteCatalogItem(i){
  persist();render();
 }
 function tablePage(title,heads,rows,key,fields,type){const allowed=isAdmin()||hasPermission(type==='price'?'prices':type==='item'?'items':'sponsors');return `<div class="panel"><div class="panelhead"><h3>${title}</h3><div class="toolbar"><input placeholder="Cari..." oninput="filterTable(this)"><button class="primary" onclick="addRow('${type}')" ${allowed?'':'style="display:none"'}>+ Tambah Data</button></div></div><div class="tablewrap"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}<th>Aksi</th></tr></thead><tbody id="dataRows">${rows.map((r,i)=>`<tr>${fields.map(f=>`<td>${esc(r[f]??'')}</td>`).join('')}<td><button class="soft" onclick="editRow('${type}',${i})" ${allowed?'':'style="display:none"'}>Edit</button></td></tr>`).join('')}</tbody></table></div></div>`}
-let sharedInventory={items:[],returns:[],updated_at:null};
+let sharedInventory={items:[],returns:[],additions:[],updated_at:null};
 let sharedInventoryBusy=false;
 function inventoryCatalogProgress(product){
  const name=String(product?.name||'').trim().toLowerCase();
@@ -329,12 +329,50 @@ function inventoryPage(){
  const totalAvailable=catalog.reduce((n,p)=>n+inventoryCatalogProgress(p).remain,0);
  const totalReturned=returns.reduce((n,x)=>n+Number(x.qty||0),0);
  return `<div class="cards"><div class="card"><small>Jenis Barang</small><strong>${catalog.length}</strong></div><div class="card"><small>Total Stok Tersedia</small><strong>${totalAvailable}</strong></div><div class="card"><small>Total Retur</small><strong>${returns.length}</strong></div><div class="card"><small>Jumlah Diretur</small><strong>${totalReturned}</strong></div></div>
- <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Stok mengikuti Daftar Harga & Item dan tersimpan terpisah sesuai website yang sedang dibuka.</small></div><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div>
+ <div class="panel"><div class="panelhead"><div><h3>Tambah & Retur Barang</h3><small>Stok mengikuti Daftar Harga & Item dan tersimpan terpisah sesuai website yang sedang dibuka.</small></div><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button class="soft" onclick="downloadInventoryPdf('incoming')">Download PDF Barang Masuk</button><button class="soft" onclick="downloadInventoryPdf('returns')">Download PDF Barang Retur</button><button class="soft" onclick="refreshSharedInventory()">↻ Refresh Data</button></div></div>
  <div class="formgrid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">＋ Tambah Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invAddProduct"><option value="">Pilih barang</option>${addOptions}</select></div><div class="field" style="margin-top:10px"><label>Jumlah Masuk</label><input id="invAddQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invAddNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="addInventoryItem()" ${sharedInventoryBusy||!catalog.length?'disabled':''}>Simpan Barang</button></div>
  <div style="border:1px solid #dbe3ed;border-radius:12px;padding:16px"><h3 style="margin:0 0 12px">↩ Retur Barang</h3><div class="field"><label>Pilih Barang dari Daftar Harga & Item</label><select id="invReturnItem" onchange="syncInventoryRemaining()"><option value="">Pilih barang</option>${returnOptions}</select></div><div class="field" style="margin-top:10px"><label>Sisa Barang Setelah Bidding</label><input id="invReturnRemaining" type="number" min="0" step="1" value="0"><small style="color:#64748b">Otomatis mengikuti sisa stok pada Daftar Harga & Item. Sesuaikan jika hasil hitung fisik berbeda.</small></div><div class="field" style="margin-top:10px"><label>Jumlah Diretur</label><input id="invReturnQty" type="number" min="1" step="1" value="1"></div><div class="field" style="margin-top:10px"><label>Keterangan</label><input id="invReturnNote" placeholder="Opsional"></div><button class="primary" style="width:100%;margin-top:14px" onclick="returnInventoryItem()" ${!catalog.length||sharedInventoryBusy?'disabled':''}>Simpan Retur</button></div></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Daftar Stok Barang</h3><small>Stok tersedia mengikuti sisa stok Daftar Harga & Item dan berkurang otomatis saat retur.</small></div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Jumlah Stok</th><th>Sudah Diretur</th><th>Tersedia</th><th>Keterangan</th></tr></thead><tbody>${catalog.length?catalog.map((p,i)=>{const stock=inventoryCatalogProgress(p);const inv=products.find(x=>String(x.name||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase());const returned=returns.filter(x=>String(x.itemName||'').trim().toLowerCase()===String(p.name||'').trim().toLowerCase()).reduce((n,x)=>n+Number(x.qty||0),0);return `<tr><td>${i+1}</td><td><b>${esc(p.name)}</b></td><td>${stock.stock}</td><td>${returned}</td><td><b>${stock.remain}</b></td><td>${esc(inv?.notes||'-')}</td></tr>`}).join(''):'<tr><td colspan="6" class="empty">Belum ada barang di Daftar Harga & Item.</td></tr>'}</tbody></table></div></div>
  <div class="panel"><div class="panelhead"><div><h3>Riwayat Retur Barang</h3><small>Catatan retur untuk website ini saja. Edit dan hapus hanya tersedia untuk Admin.</small></div></div><div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Nama Barang</th><th>Jumlah</th><th>Petugas</th><th>Website</th><th>Keterangan</th>${isAdmin()?'<th>Aksi Admin</th>':''}</tr></thead><tbody>${returns.length?[...returns].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))).map(x=>`<tr><td>${esc(x.date||'-')}</td><td><b>${esc(x.itemName||'-')}</b></td><td>${Number(x.qty||0)}</td><td>${esc(x.createdBy||'-')}</td><td>${x.site==='dana'?'Dana Paramita':'Bidding'}</td><td>${esc(x.notes||'-')}</td>${isAdmin()?`<td style="white-space:nowrap"><button class="soft" onclick="editInventoryReturn('${esc(x.id)}')">Edit</button> <button class="soft" style="color:#b91c1c;background:#fff1f2" onclick="deleteInventoryReturn('${esc(x.id)}')">Hapus</button></td>`:''}</tr>`).join(''):`<tr><td colspan="${isAdmin()?7:6}" class="empty">Belum ada riwayat retur.</td></tr>`}</tbody></table></div></div>`;
+}
+function inventoryPdfEscape(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function downloadInventoryPdf(kind){
+ const isIncoming=kind==='incoming';
+ const siteName=currentSite==='dana'?'Dana Paramita':'Bidding';
+ const title=isIncoming?'RINCIAN BARANG MASUK':'RINCIAN BARANG RETUR';
+ if(typeof window.html2pdf!=='function'){alert('Fitur PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
+ const fmtDate=value=>{if(!value)return '-';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleDateString('id-ID');};
+ let rows=[];
+ if(isIncoming){
+  const additions=Array.isArray(sharedInventory.additions)?sharedInventory.additions:[];
+  rows=additions.map(x=>({...x,qty:Number(x.qty||0)}));
+  // Older stock records predate per-transaction logs. Show any unlogged quantity
+  // as a clearly labelled opening balance rather than silently omitting it.
+  const loggedByName=new Map();
+  rows.forEach(x=>{const k=String(x.itemName||'').trim().toLowerCase();loggedByName.set(k,(loggedByName.get(k)||0)+Number(x.qty||0));});
+  (sharedInventory.items||[]).forEach(inv=>{
+   const name=String(inv.name||'').trim(),key=name.toLowerCase();
+   const legacyQty=Math.max(0,Number(inv.totalQty||0)-(loggedByName.get(key)||0));
+   if(legacyQty>0)rows.push({itemName:name,qty:legacyQty,date:inv.createdAt||'',createdAt:inv.createdAt||'',createdBy:'Saldo awal / riwayat lama',notes:inv.notes||'Transaksi sebelum pencatatan PDF diaktifkan'});
+  });
+ }else{
+  rows=(Array.isArray(sharedInventory.returns)?sharedInventory.returns:[]).map(x=>({...x,qty:Number(x.qty||0)}));
+ }
+ rows.sort((a,b)=>String(b.createdAt||b.date||'').localeCompare(String(a.createdAt||a.date||'')));
+ const totalQty=rows.reduce((n,x)=>n+Number(x.qty||0),0);
+ const bodyRows=rows.length?rows.map((x,i)=>`<tr><td>${i+1}</td><td>${inventoryPdfEscape(x.date||fmtDate(x.createdAt))}</td><td>${inventoryPdfEscape(x.itemName||x.name||'-')}</td><td class="num">${Number(x.qty||0).toLocaleString('id-ID')}</td><td>${inventoryPdfEscape(x.createdBy||'-')}</td><td>${inventoryPdfEscape(x.notes||'-')}</td></tr>`).join(''):`<tr><td colspan="6" class="empty">Belum ada data ${isIncoming?'barang masuk':'barang retur'}.</td></tr>`;
+ const root=document.createElement('div');
+ root.style.cssText='width:100%;box-sizing:border-box;background:#fff;color:#172b42;padding:24px;font-family:Arial,sans-serif;font-size:11px;';
+ root.innerHTML=`<div style="text-align:center;margin-bottom:18px"><div style="font-size:17px;font-weight:700;letter-spacing:.4px">YAYASAN VIHARA DHARMA SHANTI</div><div style="font-size:13px;font-weight:700;margin-top:8px">${title}</div><div style="font-size:11px;margin-top:4px">Website: ${siteName}</div><div style="font-size:10px;color:#64748b;margin-top:4px">Dicetak: ${new Date().toLocaleString('id-ID')}</div></div><div style="display:flex;justify-content:space-between;margin:12px 0;padding:9px 10px;background:#f1f5f9;border:1px solid #dbe3ed"><b>Jumlah transaksi: ${rows.length}</b><b>Total kuantitas: ${totalQty.toLocaleString('id-ID')}</b></div><table style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr style="background:#eaf0f6"><th style="width:5%">No</th><th style="width:14%">Tanggal</th><th style="width:25%">Nama Barang</th><th style="width:10%">Jumlah</th><th style="width:18%">Petugas</th><th style="width:28%">Keterangan</th></tr></thead><tbody>${bodyRows}</tbody></table><div style="margin-top:22px;text-align:right;font-size:9px;color:#64748b">Dokumen dibuat otomatis dari data website ${siteName}.</div>`;
+ const style=document.createElement('style');style.textContent='#inventoryPdfTemp table th,#inventoryPdfTemp table td{border:1px solid #cbd5e1;padding:7px 6px;text-align:left;vertical-align:top;overflow-wrap:anywhere}#inventoryPdfTemp table td.num{text-align:center;font-weight:700}#inventoryPdfTemp tbody tr:nth-child(even){background:#f8fafc}#inventoryPdfTemp .empty{text-align:center;padding:20px;color:#64748b}';
+ root.id='inventoryPdfTemp';root.appendChild(style);document.body.appendChild(root);
+ try{
+  const fileSite=currentSite==='dana'?'dana-paramita':'bidding';
+  const dateTag=new Date().toISOString().slice(0,10);
+  await window.html2pdf().set({margin:[8,8,8,8],filename:`rincian-${isIncoming?'barang-masuk':'barang-retur'}-${fileSite}-${dateTag}.pdf`,image:{type:'jpeg',quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false},jsPDF:{unit:'mm',format:'a4',orientation:'landscape'},pagebreak:{mode:['css','legacy']}}).from(root).save();
+ }catch(e){console.error(e);alert('Gagal membuat PDF: '+(e?.message||e));}
+ finally{root.remove();}
 }
 function syncInventoryRemaining(){
  const index=document.getElementById('invReturnItem')?.value??'';
@@ -343,7 +381,7 @@ function syncInventoryRemaining(){
  if(field)field.value=product?String(inventoryCatalogProgress(product).remain):'0';
 }
 async function refreshSharedInventory(){
- try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[]};sharedInventory.returns=(sharedInventory.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});render();vdsSyncNote('Data stok website ini berhasil diperbarui');}
+ try{const out=await vdsApi('get-shared-inventory',{site:currentSite});sharedInventory=out.inventory||{items:[],returns:[],additions:[]};sharedInventory.additions=Array.isArray(sharedInventory.additions)?sharedInventory.additions:[];sharedInventory.returns=(sharedInventory.returns||[]).map(r=>{const clean={...r};delete clean.reason;delete clean.returnReason;return clean;});render();vdsSyncNote('Data stok website ini berhasil diperbarui');}
  catch(e){alert('Gagal memuat data barang: '+e.message);}
 }
 async function saveSharedInventory(next){
@@ -358,10 +396,11 @@ async function addInventoryItem(){
  const qty=Number(document.getElementById('invAddQty')?.value||0),notes=document.getElementById('invAddNote')?.value.trim()||'';
  if(!product){alert('Pilih barang dari Daftar Harga & Item.');return;}if(!Number.isInteger(qty)||qty<1){alert('Jumlah masuk minimal 1.');return;}
  const name=String(product.name||'').trim(),catalogNo=product.no??Number(index)+1,price=Number(product.price||0);
- const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];
+ const next=JSON.parse(JSON.stringify(sharedInventory));next.items=Array.isArray(next.items)?next.items:[];next.returns=Array.isArray(next.returns)?next.returns:[];next.additions=Array.isArray(next.additions)?next.additions:[];
  let inv=next.items.find(x=>String(x.name||'').trim().toLowerCase()===name.toLowerCase());
  if(inv){inv.catalogNo=catalogNo;inv.name=name;inv.price=price;inv.totalQty=Number(inv.totalQty||0)+qty;inv.availableQty=Number(inv.availableQty||0)+qty;inv.notes=notes||inv.notes||'';inv.updatedAt=new Date().toISOString();}
  else next.items.push({id:'inv-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),site:currentSite,catalogNo,name,price,totalQty:qty,returnedQty:0,availableQty:qty,notes,createdAt:new Date().toISOString()});
+ next.additions.push({id:'add-'+Date.now()+'-'+Math.random().toString(36).slice(2,8),itemId:inv.id,itemName:name,catalogNo,qty,notes,date:new Date().toLocaleDateString('id-ID'),createdAt:new Date().toISOString(),createdBy:currentUser,site:currentSite});
  if(!await saveSharedInventory(next))return;
  const stock=inventoryCatalogProgress(product);const newStock=stock.stock+qty,newRemain=stock.remain+qty;
  product.stock=newStock;
