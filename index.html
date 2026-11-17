@@ -1207,7 +1207,7 @@ function invoiceSingleMarkup(id,copyIndex=1){
  const editable=isAdmin();const ro=editable?'':'readonly tabindex="-1" aria-readonly="true"';
  const copies=t.invoiceCopies||{};
  const vals=copies[String(copyIndex)]||{};
- const val=(key,fallback)=>Object.prototype.hasOwnProperty.call(vals,key)?vals[key]:fallback;
+ const val=(key,fallback)=>{const v=Object.prototype.hasOwnProperty.call(vals,key)?vals[key]:fallback;return key==='item'?String(v).replace(/^NO\.\s*\d+\s*-\s*/i,''):v;};
  const bind=(field)=>editable?`oninput="updateInvoiceCopyField('${id}',${copyIndex},'${field}',this.value)"`:'';
  return `<div class="invoice" data-copy-index="${copyIndex}"><img src="${invoiceBackground}" style="transform:${invoiceBgTransform()}"><input class="invfield invbidder" ${ro} value="${esc(val('bidder',t.bidder))}" ${editable?`onfocus="selectInvoiceElement('bidder',${copyIndex})" ${bind('bidder')}`:''}><input class="invfield invamount" ${ro} value="${esc(val('amount','Rp '+Number(t.total||0).toLocaleString('id-ID')))}" ${editable?`inputmode="numeric" onfocus="selectInvoiceElement('amount',${copyIndex})" ${bind('amount')}`:''}><input class="invfield invitem" ${ro} value="${esc(val('item',currentSite==='dana'?(t.itemName+' * '+t.qty):t.itemName))}" ${editable?`onfocus="selectInvoiceElement('item',${copyIndex})" ${bind('item')}`:''}><input class="invfield invno" ${ro} value="${esc(val('no',t.invoice))}" ${editable?`onfocus="selectInvoiceElement('no',${copyIndex})" ${bind('no')}`:''}><input class="invfield invcashier" ${ro} value="${esc(val('cashier',t.cashier||''))}" ${editable?`onfocus="selectInvoiceElement('cashier',${copyIndex})" ${bind('cashier')}`:''}></div>`;
 }
@@ -1219,7 +1219,7 @@ function invoiceThirdMarkup(id){
  const val=(key,fallback)=>Object.prototype.hasOwnProperty.call(vals,key)?vals[key]:fallback;
  const classMap={bidder:'invbidder',amount:'invamount',item:'invitem',no:'invno',cashier:'invcashier'};
  const field=(cls,key,fallback)=>`<input class="inv3field invfield ${classMap[key]} ${cls}" ${ro} value="${esc(val(key,fallback))}" ${editable?`onfocus="selectInvoiceElement('${key}',3)" oninput="updateInvoiceCopyField('${id}',3,'${key}',this.value)"`:''}>`;
- return `<div class="invoice-copy-third"><div class="invoice-third" data-copy-index="3"><img src="${invoiceThirdBackground}">${field('inv3bidder','bidder',t.bidder)}${field('inv3amount','amount','Rp '+Number(t.total||0).toLocaleString('id-ID'))}${field('inv3item','item','NO. '+t.bidNo+' - '+t.itemName)}${field('inv3no','no',t.invoice)}${field('inv3cashier','cashier',t.cashier||'')}</div></div>`;
+ return `<div class="invoice-copy-third"><div class="invoice-third" data-copy-index="3"><img src="${invoiceThirdBackground}">${field('inv3bidder','bidder',t.bidder)}${field('inv3amount','amount','Rp '+Number(t.total||0).toLocaleString('id-ID'))}${field('inv3item','item',t.itemName)}${field('inv3no','no',t.invoice)}${field('inv3cashier','cashier',t.cashier||'')}</div></div>`;
 }
 
 function invoiceMarkup(id){
