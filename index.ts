@@ -31,7 +31,7 @@ async function getActor(req: Request) {
   if (pErr || !profile || profile.active === false) throw new Error("Akun tidak aktif atau profil tidak ditemukan.");
   return { user: data.user, profile, token };
 }
-function isAdmin(profile: any) { return profile.role === "admin" && profile.active !== false; }
+function isAdmin(profile: any) { return String(profile?.role || "").toLowerCase() === "admin" && profile.active !== false; }
 async function requireAdmin(req: Request) {
   const actor = await getActor(req);
   if (!isAdmin(actor.profile)) throw new Error("Aksi ini hanya boleh dilakukan Admin.");
@@ -39,13 +39,25 @@ async function requireAdmin(req: Request) {
 }
 async function requireSiteAccess(req: Request, site: string) {
   const actor = await getActor(req);
-  if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid.");
+  if (!["bidding", "dana", "sponsor"].includes(site)) throw new Error("Website tidak valid. Identitas website tidak dikenali oleh API.");
   const permissions = actor.profile.permissions || {};
-  const permissionKey = site === "bidding" ? "siteBidding" : site === "dana" ? "siteDana" : "siteSponsor";
-  if (!isAdmin(actor.profile) && permissions[permissionKey] !== true)
+  const allowed = site === "bidding" ? permissions.siteBidding === true
+    : site === "dana" ? permissions.siteDana === true
+    : (permissions.siteSponsor === true || permissions.siteBidding === true || permissions.siteDana === true);
+  if (!isAdmin(actor.profile) && !allowed)
     throw new Error("Tidak memiliki akses ke website ini.");
   return actor;
 }
+
+function normalizeSite(body: any): string {
+  const raw = body?.site ?? body?.site_id ?? body?.website ?? body?.website_id ?? "";
+  const value = String(raw).trim().toLowerCase().replace(/[\s_-]+/g, " ").replace(/\s+/g, " ");
+  if (["bidding", "website bidding", "website 1", "1"].includes(value)) return "bidding";
+  if (["dana", "dana paramita", "website dana", "website 2", "2"].includes(value)) return "dana";
+  if (["sponsor", "sponsors", "data sponsor", "data sponsor barang", "sponsor data", "website sponsor", "website 3", "3"].includes(value)) return "sponsor";
+  return "";
+}
+
 function maxNumeric(values: unknown[], fallback = 0) {
   const nums = values.map(v => Number(String(v ?? "").replace(/[^\d]/g, ""))).filter(n => Number.isFinite(n));
   return Math.max(fallback, ...nums);
@@ -163,7 +175,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "allocate-transaction-numbers") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const { data: current, error: stateErr } = await adminDb.from("app_state").select("payload").eq("site", site).maybeSingle();
       if (stateErr) throw stateErr;
@@ -181,7 +193,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "get-sync-events") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const afterId = Math.max(0, Number(body.after_id || 0));
       const { data, error } = await adminDb.from("vds_sync_events")
@@ -191,15 +203,53 @@ Deno.serve(async (req) => {
       return reply({ ok: true, events: data || [] });
     }
 
+    if (action === "get-shared-inventory" || action === "save-shared-inventory") {
+      const site = normalizeSite(body);
+      if (site !== "bidding" && site !== "dana")
+        return reply({ error: "Fitur stok hanya tersedia untuk Website Bidding dan Dana Paramita." }, 400);
+      await requireSiteAccess(req, site);
+      // Inventory snapshots are isolated by website. Both sites use the same
+      // table, but each query and insert is scoped to its own site identifier.
+      if (action === "get-shared-inventory") {
+        const { data, error } = await adminDb.from("vds_sync_events")
+          .select("event_payload").eq("site", site)
+          .contains("event_payload", { kind: "site_inventory_snapshot", site })
+          .order("id", { ascending: false }).limit(1).maybeSingle();
+        if (error) throw error;
+        const inventory = data?.event_payload?.inventory;
+        return reply({ ok: true, inventory: inventory && typeof inventory === "object"
+          ? inventory : { items: [], returns: [] } });
+      }
+      const actor = await getActor(req);
+      const incoming = body.inventory;
+      if (!incoming || typeof incoming !== "object" || !Array.isArray(incoming.items) || !Array.isArray(incoming.returns))
+        return reply({ error: "Format data barang tidak valid." }, 400);
+      if (incoming.items.length > 5000 || incoming.returns.length > 20000)
+        return reply({ error: "Jumlah data barang melebihi batas." }, 400);
+      const cleanInventory = {
+        items: incoming.items.map((item: any) => ({ ...item, site })),
+        returns: incoming.returns.map((item: any) => ({ ...item, site })),
+        updated_at: new Date().toISOString(),
+        updated_by: String(actor.profile.username || ""),
+        site
+      };
+      const { error } = await adminDb.from("vds_sync_events").insert({
+        site,
+        event_payload: { kind: "site_inventory_snapshot", site, inventory: cleanInventory }
+      });
+      if (error) throw error;
+      return reply({ ok: true, inventory: cleanInventory });
+    }
+
     if (action === "get-state" || action === "save-state") {
-      const site = String(body.site || "");
+      const site = normalizeSite(body);
       const actor = await requireSiteAccess(req, site);
       if (action === "get-state") {
         const { data, error } = await adminDb.from("app_state").select("payload,updated_at").eq("site", site).maybeSingle();
         if (error) throw error;
         return reply({ ok: true, state: data?.payload ?? null, updated_at: data?.updated_at ?? null });
       }
-      const payload = body.state;
+      let payload = body.state;
       if (!payload || typeof payload !== "object") return reply({ error: "Data state tidak valid." }, 400);
       // Atomic server-side merge: concurrent users may submit stale snapshots.
       // The SQL RPC unions transactions/history by id under the row lock, so a
