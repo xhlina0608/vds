@@ -1,30 +1,29 @@
-VDS FIX HAPUS DATA TESTING - V3
+VDS — RESPONSIVE LAYOUT UPDATE
+================================
 
-PERBAIKAN UTAMA:
-- Mencegah event transaksi lama diputar ulang setelah HAPUS DATA TESTING.
-- get-sync-events sekarang hanya mengirim event yang dibuat setelah timestamp reset terakhir.
-- save-state tidak lagi menerbitkan event transaksi lama yang terlambat masuk setelah reset.
-- Frontend mengabaikan event realtime yang timestamp-nya lebih lama dari reset.
-- Fitur dan tampilan lain dipertahankan dari paket V2, termasuk Nomor Item otomatis.
+ISI ZIP:
+- index.html: frontend utama VDS, sudah ditambahkan penyesuaian responsive.
 
-CARA PASANG (REPLACE FILE SAJA):
-1. GitHub repository VDS > folder 1-VERCEL:
-   Replace index.html dengan file 1-VERCEL/index.html dari ZIP ini.
-   Commit ke branch main dan tunggu Vercel selesai deploy.
+CARA UPDATE GITHUB / VERCEL:
+1. Backup index.html yang sedang aktif di root repository.
+2. Ekstrak ZIP ini.
+3. Ganti file index.html di ROOT repository GitHub dengan index.html dari ZIP.
+4. Commit dan push ke branch yang digunakan Vercel.
+5. Tunggu deployment Vercel berstatus Ready.
+6. Buka website dan tekan Ctrl + Shift + R.
 
-2. Supabase > Edge Functions > vds-api:
-   Replace isi index.ts dengan file 2-SUPABASE/index.ts dari ZIP ini.
-   Deploy ulang function vds-api.
+RUANG LINGKUP:
+- Penyesuaian lebar sidebar, padding, header, tombol, dan tabel agar mengikuti ukuran layar.
+- Teks panjang pada tabel akan membungkus baris, bukan memperlebar halaman.
+- Meminimalkan scroll horizontal tanpa menghilangkan kolom atau data.
+- Scroll internal halaman/tabel yang sudah ada tetap dipertahankan.
 
-3. SQL migration 006 TIDAK perlu dijalankan ulang.
+TIDAK DIUBAH:
+- Database dan tabel Supabase.
+- Edge Function / API.
+- Live Sync dan konfigurasi Realtime.
+- Data transaksi, stok, pembayaran, akun, dan perhitungan.
+- Fitur export, nota, backup, dan restore.
 
-4. Setelah frontend dan backend selesai deploy:
-   Logout, login kembali sebagai Admin, lalu jalankan HAPUS DATA TESTING sekali.
-   Refresh website untuk memastikan transaksi dan history tetap kosong.
-
-Yang dihapus hanya transaksi dan history testing pada Bidding dan Dana Paramita.
-Daftar harga, master item, akun, pengaturan, dan data inventori tidak sengaja dihapus.
-
-Catatan validasi:
-- JavaScript frontend sudah diperiksa dengan node --check.
-- Kode Edge Function disusun untuk Deno/Supabase dan belum diuji langsung di project Supabase pengguna.
+CATATAN:
+Paket ini hanya frontend. Tidak perlu deploy ulang Supabase dan tidak perlu menjalankan SQL.
