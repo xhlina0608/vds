@@ -1,0 +1,21 @@
+PEMBERSIHAN REPOSITORY VDS
+
+Deployment target: Vercel Root Directory = repository root.
+
+Dipertahankan:
+- index.html pada root sebagai halaman utama deployment.
+- Semua file Supabase: functions, migrations, schema, config, dan SQL.
+- File TypeScript/backend dan seluruh dokumentasi.
+- 3-BACKUP/ dan website-root/ sebagai arsip/versi pembanding.
+
+Dihapus dari root:
+- 11 file HTML versi lama/patch yang tidak dirujuk oleh file lain di repository.
+- ADD_DATA_SPONSOR_SUPABASE.sql pada root karena identik byte-per-byte dengan
+  supabase/ADD_DATA_SPONSOR_SUPABASE.sql.
+
+Catatan:
+- SIAKANG_VDS_DOMAIN_SPONSOR_FIX.html juga identik byte-per-byte dengan
+  3-BACKUP/index-original.html; salinan arsip di 3-BACKUP dipertahankan.
+- File backup dan backend yang tidak identik tidak dihapus.
+- Pembersihan ini tidak mengubah index.html, kode Live Sync, konfigurasi,
+  migration, atau database Supabase.
