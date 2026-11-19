@@ -92,19 +92,62 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 @media(max-width:600px){#sitePortal .loginbox>div[style*=grid-template-columns]{grid-template-columns:1fr!important}}
 </style><style id="vds-hide-yellow-notices">.note{display:none!important}</style><style id="vds-transaction-independent-scroll">
 /* Keep the VDS application viewport fixed; scroll only the transaction list. */
-#app.layout:has(.transaction-panel){height:100vh;height:100dvh;min-height:0;overflow:hidden;}
-#app.layout:has(.transaction-panel)>main{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
-#app.layout:has(.transaction-panel)>main>#content{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+#app.layout{height:100vh;height:100dvh;min-height:0;overflow:hidden;}
+#app.layout>main{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+#app.layout>main>#content{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
 #app #content>.transaction-panel{flex:1 1 auto;min-height:0;height:100%;display:flex;flex-direction:column;margin-bottom:0;overflow:hidden;}
 #app .transaction-panel>.panelhead{flex:0 0 auto;}
 #app .transaction-panel>.transaction-tablewrap{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;}
 #app .transaction-tablewrap thead th{position:sticky;top:0;z-index:2;}
 @media(max-width:900px){
-  #app.layout:has(.transaction-panel){grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);}
-  #app.layout:has(.transaction-panel)>main{height:auto;min-height:0;}
-  #app.layout:has(.transaction-panel)>main>#content{min-height:0;}
+  #app.layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);}
+  #app.layout>main{height:auto;min-height:0;}
+  #app.layout>main>#content{min-height:0;}
 }
-</style></head><body>
+</style>
+<style id="vds-independent-scroll-other-pages">
+/* Keep the browser viewport fixed and give long VDS pages their own scroll area. */
+#app.layout{height:100vh;height:100dvh;min-height:0;overflow:hidden;}
+#app.layout>main{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+#app.layout>main>#content{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+
+/* History and catalog: only the table area scrolls; title and controls stay visible. */
+#app #content[data-page="history"]>.panel,
+#app #content[data-page="prices"]>.panel,
+#app #content[data-page="items"]>.panel{flex:1 1 auto;min-height:0;height:100%;display:flex;flex-direction:column;margin-bottom:0;overflow:hidden;}
+#app #content[data-page="history"]>.panel>.panelhead,
+#app #content[data-page="prices"]>.panel>.panelhead,
+#app #content[data-page="items"]>.panel>.panelhead{flex:0 0 auto;}
+#app #content[data-page="history"] .tablewrap,
+#app #content[data-page="prices"] .tablewrap,
+#app #content[data-page="items"] .tablewrap{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;}
+#app #content[data-page="history"] .tablewrap thead th,
+#app #content[data-page="prices"] .tablewrap thead th,
+#app #content[data-page="items"] .tablewrap thead th{position:sticky;top:0;z-index:2;}
+
+/* Invoice: controls remain in place while the invoice preview is independently scrollable. */
+#app #content[data-page="invoice"]>.printpanel{flex:1 1 auto;min-height:0;height:100%;display:flex;flex-direction:column;margin-bottom:0;overflow:hidden;}
+#app #content[data-page="invoice"]>.printpanel>.panelhead,
+#app #content[data-page="invoice"]>.printpanel>.layout-toolbar,
+#app #content[data-page="invoice"]>.printpanel>.user-print-toolbar{flex:0 0 auto;}
+#app #content[data-page="invoice"] #invoicePreview{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;}
+
+/* Inventory: the complete working area scrolls inside the app, not the browser window. */
+#app #content[data-page="inventory"]{display:block;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding-right:6px;}
+#app #content[data-page="inventory"]>.panel{flex:0 0 auto;}
+
+@media(max-width:900px){
+  #app.layout{height:100vh;height:100dvh;min-height:0;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);overflow:hidden;}
+  #app.layout>main{height:100vh;height:100dvh;min-height:0;overflow:hidden;}
+  #app.layout>main>#content{min-height:0;}
+}
+@media print{
+  #app.layout,#app.layout>main,#app.layout>main>#content{height:auto!important;min-height:0!important;overflow:visible!important;display:block!important;}
+  #app #content[data-page="invoice"]>.printpanel{height:auto!important;min-height:0!important;overflow:visible!important;display:block!important;}
+  #app #content[data-page="invoice"] #invoicePreview{height:auto!important;min-height:0!important;overflow:visible!important;}
+}
+</style>
+</head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
 <div id="loginError" style="display:none;color:#b91c1c;font-size:13px;margin-top:10px"></div><button class="primary" style="width:100%;margin-top:18px" onclick="login()">MASUK</button><div class="note" style="margin-top:14px">Gunakan username dan password yang diberikan Admin.</div></div></div>
@@ -1816,7 +1859,7 @@ function ensureInventoryAdditionHistory(){
  const returnPanel=returnHeading?.closest('.panel');
  if(returnPanel)returnPanel.insertAdjacentHTML('beforebegin',panel);else c.insertAdjacentHTML('beforeend',panel);
 }
-function render(){const c=document.getElementById('content');if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory'){c.innerHTML=inventoryPage();ensureInventoryAdditionHistory();}if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
+function render(){const c=document.getElementById('content');if(c)c.dataset.page=currentPage;if(currentPage==='dashboard')c.innerHTML=dashboard();if(currentPage==='prices'||currentPage==='items')c.innerHTML=catalogPage();if(currentPage==='inventory'){c.innerHTML=inventoryPage();ensureInventoryAdditionHistory();}if(currentPage==='transactions')c.innerHTML=transactionsPage();if(currentPage==='history')c.innerHTML=historyPage();if(currentPage==='invoice')c.innerHTML=invoicePage();if(currentPage==='details')c.innerHTML=detailsPage();if(currentPage==='users')c.innerHTML=usersPage();if(currentPage==='cleanup')c.innerHTML=cleanupPage();if(currentPage==='invoice'){applyInvoiceLayout();loadLayoutControls();}}
 // Restore the previous login on a new visit/reload. The saved access token is
 // validated against the cloud before the application is opened.
 async function vdsRestoreRememberedSession(){

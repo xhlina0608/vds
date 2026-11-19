@@ -1,0 +1,14 @@
+UPDATE VDS - SCROLL HALAMAN LAIN
+
+Perubahan pada versi ini:
+1. History Bidding: area tabel riwayat dapat discroll sendiri; judul dan toolbar tetap terlihat.
+2. Nota / Invoice: area preview nota dapat discroll sendiri; kontrol pemilihan dan editor tetap di area atas. Pengaturan print diberi override agar hasil cetak tetap normal.
+3. Daftar Harga & Item: area tabel dapat discroll sendiri; judul, pencarian, dan tombol tetap terlihat.
+4. Tambah & Retur Barang: area kerja halaman dapat discroll di dalam aplikasi, bukan menggerakkan seluruh jendela browser.
+
+Live Bidding / Live Laporan Dana dan konfigurasi Live Sync tidak diubah pada pembaruan ini.
+
+Instalasi:
+- Ekstrak ZIP ke root repository GitHub, bukan ke dalam subfolder.
+- Pastikan index.html berada langsung di root repository.
+- Commit/push, lalu tunggu Vercel deployment berstatus Ready.
