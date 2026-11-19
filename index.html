@@ -656,7 +656,168 @@ html,body{height:100%;overflow:hidden!important}
   #app.layout,#app.layout>main,#app.layout>main>#content {height:auto!important;min-height:0!important;overflow:visible!important;display:block!important;}
 }
 </style>
-\n</head><body>
+\n
+<style id="vds-mobile-card-layout-v2">
+/* VDS MOBILE CARD LAYOUT V2: no sideways scrolling; desktop/tablet layout is unchanged. */
+@media screen and (max-width:700px) {
+  #app #content {
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-y:contain;
+  }
+  #app #content .tablewrap,
+  #app #content .transaction-tablewrap {
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    overflow:visible !important;
+    height:auto !important;
+    max-height:none !important;
+    border:0 !important;
+    background:transparent !important;
+    box-shadow:none !important;
+  }
+  #app #content .tablewrap table,
+  #app #content .transaction-tablewrap table {
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    table-layout:fixed !important;
+    border-collapse:separate !important;
+    border-spacing:0 !important;
+  }
+  #app #content .tablewrap table thead,
+  #app #content .transaction-tablewrap table thead {
+    display:none !important;
+  }
+  #app #content .tablewrap table tbody,
+  #app #content .transaction-tablewrap table tbody {
+    display:grid !important;
+    grid-template-columns:minmax(0,1fr) !important;
+    gap:9px !important;
+    width:100% !important;
+  }
+  #app #content .tablewrap table tbody tr,
+  #app #content .transaction-tablewrap table tbody tr {
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    margin:0 !important;
+    padding:7px 10px !important;
+    border:1px solid #e1e7ee !important;
+    border-radius:11px !important;
+    background:#fff !important;
+    box-shadow:0 1px 3px rgba(20,40,60,.05) !important;
+  }
+  #app #content .tablewrap table tbody td,
+  #app #content .transaction-tablewrap table tbody td {
+    display:flex !important;
+    align-items:flex-start !important;
+    justify-content:space-between !important;
+    gap:10px !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    padding:7px 0 !important;
+    border:0 !important;
+    border-bottom:1px solid #edf1f5 !important;
+    background:transparent !important;
+    color:#182230 !important;
+    text-align:right !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+    word-break:break-word !important;
+    font-size:12px !important;
+    line-height:1.35 !important;
+  }
+  #app #content .tablewrap table tbody td:last-child,
+  #app #content .transaction-tablewrap table tbody td:last-child {
+    border-bottom:0 !important;
+  }
+  #app #content .tablewrap table tbody td::before,
+  #app #content .transaction-tablewrap table tbody td::before {
+    content:attr(data-label);
+    display:block !important;
+    flex:0 0 36% !important;
+    max-width:36% !important;
+    color:#718096 !important;
+    font-size:10px !important;
+    font-weight:700 !important;
+    line-height:1.35 !important;
+    text-align:left !important;
+    overflow-wrap:anywhere !important;
+  }
+  #app #content .tablewrap table tbody td > *,
+  #app #content .transaction-tablewrap table tbody td > * {
+    min-width:0 !important;
+    max-width:64% !important;
+  }
+  #app #content .tablewrap table tbody td button,
+  #app #content .transaction-tablewrap table tbody td button {
+    min-height:34px !important;
+    padding:7px 10px !important;
+    font-size:11px !important;
+    white-space:nowrap !important;
+  }
+  #app #content .tablewrap table tbody td:last-child,
+  #app #content .transaction-tablewrap table tbody td:last-child {
+    justify-content:flex-end !important;
+    flex-wrap:wrap !important;
+    gap:7px !important;
+    padding-top:9px !important;
+  }
+  #app #content .tablewrap table tbody td:last-child::before,
+  #app #content .transaction-tablewrap table tbody td:last-child::before {
+    flex:1 0 100% !important;
+    max-width:100% !important;
+  }
+  #app #content .tablewrap table tbody td[colspan],
+  #app #content .transaction-tablewrap table tbody td[colspan] {
+    display:block !important;
+    text-align:left !important;
+  }
+  #app #content .tablewrap table tbody td[colspan]::before,
+  #app #content .transaction-tablewrap table tbody td[colspan]::before {
+    display:none !important;
+  }
+  #app #content .panel {
+    min-width:0 !important;
+    max-width:100% !important;
+  }
+  #app #content .panelhead {
+    min-width:0 !important;
+  }
+  #app #content .panelhead button {
+    max-width:100% !important;
+  }
+  #app #content input,
+  #app #content select,
+  #app #content textarea {
+    max-width:100% !important;
+  }
+}
+@media screen and (max-width:380px) {
+  #app #content .tablewrap table tbody tr,
+  #app #content .transaction-tablewrap table tbody tr {
+    padding:6px 8px !important;
+  }
+  #app #content .tablewrap table tbody td,
+  #app #content .transaction-tablewrap table tbody td {
+    font-size:11px !important;
+    gap:7px !important;
+  }
+  #app #content .tablewrap table tbody td::before,
+  #app #content .transaction-tablewrap table tbody td::before {
+    flex-basis:34% !important;
+    max-width:34% !important;
+    font-size:9px !important;
+  }
+}
+</style>
+
+</head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
 <div id="loginError" style="display:none;color:#b91c1c;font-size:13px;margin-top:10px"></div><button class="primary" style="width:100%;margin-top:18px" onclick="login()">MASUK</button><div class="note" style="margin-top:14px">Gunakan username dan password yang diberikan Admin.</div></div></div>
@@ -2396,4 +2557,40 @@ async function vdsRestoreRememberedSession(){
 }
 Promise.resolve().then(()=>vdsRestoreRememberedSession());
 
-</script></body></html>
+</script>
+<script id="vds-mobile-table-labels-v2">
+(function(){
+  function labelTables(root){
+    if(!root || !root.querySelectorAll) return;
+    root.querySelectorAll('#content .tablewrap table, #content .transaction-tablewrap table').forEach(function(table){
+      var headerRow = table.querySelector('thead tr');
+      var labels = headerRow ? Array.from(headerRow.querySelectorAll('th')).map(function(th){
+        return (th.innerText || th.textContent || '').replace(/\s+/g,' ').trim();
+      }) : [];
+      table.querySelectorAll('tbody tr').forEach(function(row){
+        Array.from(row.children).forEach(function(cell,index){
+          if(cell.tagName !== 'TD') return;
+          if(cell.hasAttribute('colspan')) {
+            cell.setAttribute('data-label','');
+            return;
+          }
+          var label = labels[index] || ('Kolom ' + (index + 1));
+          cell.setAttribute('data-label',label);
+        });
+      });
+    });
+  }
+  function start(){
+    var content = document.getElementById('content');
+    if(!content) return;
+    labelTables(document);
+    var observer = new MutationObserver(function(){ labelTables(document); });
+    observer.observe(content,{childList:true,subtree:true});
+    window.addEventListener('resize',function(){labelTables(document)},{passive:true});
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start);
+  else start();
+})();
+</script>
+
+</body></html>

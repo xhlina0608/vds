@@ -1,0 +1,10 @@
+VDS MOBILE RESPONSIVE UPDATE
+- Updated index.html with mobile card layout for tables.
+- Mobile tables now show each record as a vertical card with field labels.
+- Mobile content scrolls vertically; no horizontal table scrolling is required.
+- Desktop and laptop layouts are unchanged.
+- No database schema, Supabase queries, Realtime configuration, or transaction data were changed.
+Deployment:
+- Extract ZIP contents directly into the VDS GitHub repository root.
+- Keep Vercel Root Directory set to the repository root.
+- Deploy from the main branch as usual.
