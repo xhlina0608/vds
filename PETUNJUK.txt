@@ -1,16 +1,19 @@
-VDS - PERBAIKAN PEMBACAAN IZIN ARDI
+VDS LIVE SYNC - PATCH MINIMAL
 
-Isi ZIP hanya file frontend yang diperlukan:
-- index.html                 -> untuk root repository GitHub/Vercel
-- 1-VERCEL/index.html        -> salinan identik untuk folder 1-VERCEL
+File yang diperbarui: index.html saja.
 
-CARA UPDATE:
-1. Backup index.html lama.
-2. Ganti index.html di ROOT repository GitHub dengan index.html dari ZIP.
-3. Jika repository juga menyimpan 1-VERCEL/index.html, ganti dengan file dari folder 1-VERCEL agar keduanya sama.
-4. Commit dan push, lalu tunggu Vercel deploy selesai.
-5. Buka VDS, lakukan Ctrl+Shift+R, lalu cek Manajemen Akun > Atur Izin Ardi.
+Pemasangan:
+1. Backup index.html yang sedang dipakai.
+2. Ganti index.html di root GitHub dengan file ini.
+3. Ganti juga 1-VERCEL/index.html dengan file yang sama.
+4. Commit dan push, lalu tunggu deployment Vercel selesai.
+5. Logout lalu login kembali di dua perangkat, buka website Bidding/Dana.
+6. Buka Developer Tools > Console bila status masih reconnect. Cari log [VDS Live Sync] dan kirim screenshot.
 
-Perbaikan: nama key permission dicocokkan tanpa membedakan huruf besar/kecil
-(misal SITEBIDDING dan siteBidding dianggap sebagai izin yang sama).
-Tidak ada perubahan SQL, Edge Function, data Supabase, atau kode Live Sync.
+Perubahan:
+- Menangkap detail error channel Realtime ke Console.
+- Menangani channel yang tidak memberi status dalam 25 detik.
+- Menjaga fallback polling hanya saat Realtime gagal, maksimal sekali per 60 detik.
+- Tidak mengubah RLS, database, Edge Function, hak akses, transaksi, atau pengurutan nomor.
+
+Catatan: patch ini memperkuat penanganan koneksi dan menampilkan penyebab error yang sebenarnya. Status SUBSCRIBED pada perangkat dan uji transaksi antarperangkat tetap diperlukan untuk memastikan Live Sync benar-benar normal.

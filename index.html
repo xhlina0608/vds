@@ -118,7 +118,7 @@ let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getI
 let vdsSaveTimer=null, vdsSaving=false, vdsSaveAgain=false, vdsCloudLoaded={bidding:false,dana:false};
 // Low-egress live sync: receive only compact transaction events, not full app_state snapshots.
 let vdsRealtimeClient=null, vdsRealtimeChannel=null, vdsRealtimeSite='', vdsRealtimeGeneration=0;
-let vdsRealtimeRetryTimer=null, vdsRealtimeRetryDelay=5000, vdsRealtimeConnected=false;
+let vdsRealtimeRetryTimer=null, vdsRealtimeRetryDelay=5000, vdsRealtimeConnected=false, vdsRealtimeConnectTimer=null;
 let vdsSyncPollTimer=null, vdsSyncPollBusy=false, vdsSyncPollSite='', vdsSyncEventCursor={bidding:0,dana:0};
 const vdsSeenSyncEventIds=new Set();
 function vdsStopSyncPolling(){
@@ -128,6 +128,7 @@ function vdsStopSyncPolling(){
 function vdsStopRealtime(){
  vdsRealtimeGeneration++;
  if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
+ if(vdsRealtimeConnectTimer){clearTimeout(vdsRealtimeConnectTimer);vdsRealtimeConnectTimer=null;}
  vdsRealtimeConnected=false;
  if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
  vdsRealtimeChannel=null;vdsRealtimeSite='';
@@ -213,26 +214,42 @@ async function vdsStartRealtime(site){
  try{
   if(!vdsRealtimeClient)vdsRealtimeClient=window.supabase.createClient('https://gmpedvbzmgrpwsgsyszj.supabase.co',VDS_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},realtime:{params:{eventsPerSecond:2}}});
   await vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
-  vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status)=>{
+  vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status,err)=>{
    if(generation!==vdsRealtimeGeneration||site!==currentSite)return;
    if(status==='SUBSCRIBED'){
     vdsRealtimeConnected=true;vdsRealtimeRetryDelay=5000;
     if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
+    if(vdsRealtimeConnectTimer){clearTimeout(vdsRealtimeConnectTimer);vdsRealtimeConnectTimer=null;}
     vdsStopSyncPolling();
-    vdsSyncNote('Realtime aktif · sinkronisasi langsung',2200);
-    // Satu kali catch-up saat koneksi pulih; bukan polling berulang.
-    vdsPollSyncEvents(site).catch(e=>console.warn('Live sync catch-up:',e));
+    console.info('[VDS Live Sync] SUBSCRIBED',site);
+    vdsSyncNote('Realtime aktif · sinkronisasi langsung',2600);
+    // Catch-up satu kali setelah channel benar-benar aktif.
+    vdsPollSyncEvents(site).catch(e=>console.warn('[VDS Live Sync] catch-up:',e));
    }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
     vdsRealtimeConnected=false;
-    vdsSyncNote('Realtime mencoba tersambung kembali · cadangan aktif',3500);
+    const detail=err&&(err.message||err.reason||String(err));
+    console.warn('[VDS Live Sync] '+status,err||'Tidak ada detail error');
+    if(vdsRealtimeConnectTimer){clearTimeout(vdsRealtimeConnectTimer);vdsRealtimeConnectTimer=null;}
+    vdsSyncNote('Realtime reconnect · cadangan aktif'+(detail?' · '+String(detail).slice(0,90):''),5000);
     vdsStartSyncPolling(site);
-    if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
+    const failedChannel=vdsRealtimeChannel;
     vdsRealtimeChannel=null;vdsRealtimeSite='';
+    if(failedChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(failedChannel)}catch(e){console.warn('[VDS Live Sync] remove channel:',e);}}
     vdsScheduleRealtimeRetry(site);
    }
   });
+  // Jangan biarkan channel menggantung tanpa status; fallback tetap hemat (60 detik).
+  if(vdsRealtimeConnectTimer)clearTimeout(vdsRealtimeConnectTimer);
+  vdsRealtimeConnectTimer=setTimeout(()=>{
+   if(generation!==vdsRealtimeGeneration||site!==currentSite||vdsRealtimeConnected)return;
+   console.warn('[VDS Live Sync] subscribe belum mendapat status setelah 25 detik');
+   const pendingChannel=vdsRealtimeChannel;vdsRealtimeChannel=null;vdsRealtimeSite='';
+   if(pendingChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(pendingChannel)}catch(e){}}
+   vdsStartSyncPolling(site);vdsSyncNote('Realtime belum merespons · cadangan cek tiap 60 detik',4500);vdsScheduleRealtimeRetry(site);
+  },25000);
  }catch(e){
   console.warn('Realtime tidak tersedia:',e);
+  if(vdsRealtimeConnectTimer){clearTimeout(vdsRealtimeConnectTimer);vdsRealtimeConnectTimer=null;}
   vdsRealtimeConnected=false;vdsRealtimeChannel=null;vdsRealtimeSite='';
   vdsStartSyncPolling(site);vdsSyncNote('Realtime gagal · mencoba ulang otomatis',3500);vdsScheduleRealtimeRetry(site);
  }
