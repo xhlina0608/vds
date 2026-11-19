@@ -817,7 +817,93 @@ html,body{height:100%;overflow:hidden!important}
 }
 </style>
 
-</head><body>
+<style id="vds-mobile-scroll-fix-v3">
+
+/* MOBILE SCROLL FIX V3: restore natural page scrolling on phones.
+   The card layout remains unchanged; this only removes the fixed-height scroll lock. */
+@media screen and (max-width:700px) {
+  html, body {
+    height:auto !important;
+    min-height:100% !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+  body { position:static !important; }
+  #app.layout {
+    display:flex !important;
+    flex-direction:column !important;
+    height:auto !important;
+    min-height:100dvh !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+  #app.layout > .side {
+    flex:0 0 auto !important;
+    height:auto !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+  #app.layout > main {
+    flex:0 0 auto !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    display:block !important;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom)) !important;
+  }
+  #app.layout > main > .top {
+    height:auto !important;
+    overflow:visible !important;
+  }
+  #app.layout > main > #content,
+  #app #content {
+    display:block !important;
+    flex:0 0 auto !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+  }
+  #app #content > .transaction-panel,
+  #app #content[data-page="transactions"] > .transaction-panel,
+  #app #content[data-page="history"] > .panel,
+  #app #content[data-page="prices"] > .panel,
+  #app #content[data-page="items"] > .panel,
+  #app #content[data-page="inventory"] > .panel,
+  #app #content[data-page="invoice"] > .printpanel {
+    flex:0 0 auto !important;
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    margin-bottom:10px !important;
+  }
+  #app #content .transaction-tablewrap,
+  #app #content .tablewrap,
+  #app #content #invoicePreview {
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+  }
+  #app #content[data-page="inventory"] {
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+  #app #content .transaction-panel > .panelhead {
+    flex:0 0 auto !important;
+  }
+}
+
+</style></head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
 <div id="loginError" style="display:none;color:#b91c1c;font-size:13px;margin-top:10px"></div><button class="primary" style="width:100%;margin-top:18px" onclick="login()">MASUK</button><div class="note" style="margin-top:14px">Gunakan username dan password yang diberikan Admin.</div></div></div>
