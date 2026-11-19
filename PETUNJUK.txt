@@ -1,18 +1,11 @@
-VDS - PERBAIKAN LIVE SYNC
-
-Perubahan:
-- Realtime websocket tetap menjadi jalur utama untuk update langsung.
-- Pemeriksaan cadangan get-sync-events tetap berjalan setiap 30 detik walaupun status channel sudah SUBSCRIBED.
-- Ini menangani kondisi channel terlihat tersambung tetapi event database tidak diterima oleh browser.
-- Polling hanya mengambil event baru (after_id), bukan mengunduh seluruh app_state.
+PERUBAHAN DANA PARAMITA
+- Jika tombol CASH (nama donatur tidak dicatat) dipilih, transaksi tidak dapat disimpan sebagai Belum Bayar.
+- Jika pembayaran Belum Bayar, nama donatur wajib diisi.
+- Jika tombol CASH tidak dipilih dan nama donatur kosong, transaksi Belum Bayar ditolak.
+- Perubahan lain dari ZIP dasar VDS-BIDDING-TANPA-QTY tetap dipertahankan.
 
 Pemasangan:
 1. Ekstrak ZIP.
-2. Ganti file 1-VERCEL/index.html di project GitHub dengan file dari folder ini.
-3. Commit/push ke branch yang dipakai Vercel.
-4. Tunggu deployment selesai, lalu buka ulang VDS di kedua komputer.
-5. Uji: input satu transaksi di Admin. User harus melihatnya langsung via Realtime atau paling lambat sekitar 30 detik melalui pemeriksaan cadangan.
-
-Catatan:
-- ZIP ini hanya mengubah frontend. Tidak menjalankan SQL migration dan tidak mengubah Edge Function.
-- Pemeriksaan cadangan menambah sekitar 2 panggilan API per menit per komputer yang sedang membuka website. Realtime tetap menjadi jalur utama.
+2. Ganti file 1-VERCEL/index.html pada project GitHub.
+3. Commit/push ke branch yang dipakai Vercel dan tunggu deploy selesai.
+4. Tes Dana Paramita: CASH + Belum Bayar harus ditolak; nama donatur kosong + Belum Bayar harus ditolak; nama donatur diisi + Belum Bayar boleh disimpan.
