@@ -1,17 +1,17 @@
-VDS SPONSOR FIX — PACKAGE
+UPDATE VDS – RINCIAN LEBIH BAYAR & NOMOR TRANSAKSI
 
-Isi:
-1. index.html — website utama, termasuk Data Sponsor.
-2. supabase/functions/vds-api/index.ts — Edge Function API yang mendukung website:
-   bidding, dana, sponsor.
-
-Perubahan:
-- Ganti website dilakukan di tab yang sama (tidak membuka tab baru lalu kembali ke portal).
-- Pemulihan login memvalidasi sesi, bukan memaksa akun memiliki akses ke Website Bidding.
-- API menyediakan action validate-session dan mendukung identitas website sponsor.
+1. Ganti file 1-VERCEL/index.html pada repository GitHub dengan file dari folder 1-VERCEL di ZIP ini.
+2. Commit ke branch main dan tunggu deployment Vercel selesai.
+3. Update tampilan ini menghilangkan tiga kartu ringkasan LEBIH BAYAR CASH / TRANSFER / QRIS dari halaman Live Bidding dan Live Laporan Dana.
+   Nilai lebih bayar transaksi tetap dihitung dan disimpan; hanya kartu ringkasannya yang disembunyikan. Rincian Dana tetap menjadi tempat melihat detailnya.
+4. Untuk memulai ulang nomor setelah data testing dikosongkan, buka Supabase > SQL Editor, lalu jalankan RESET-NOMOR-SETELAH-TESTING.sql SATU KALI.
+   Pastikan transaksi testing memang sudah kosong sebelum menjalankan SQL tersebut.
+5. Setelah reset:
+   - Bidding: BID NO berikutnya 01 dan Nota 2601.
+   - Dana Paramita: ORDER NO berikutnya 01 dan Nota 26001.
+6. Refresh website dengan Ctrl+F5 setelah deployment.
 
 PENTING:
-- Upload/deploy index.html ke hosting Vercel sebagai file website.
-- File index.ts harus di-deploy ke Supabase Edge Function bernama vds-api.
-- Jangan menghapus data/tabel Supabase dan jangan menjalankan SQL migration untuk paket ini.
-- Jika memakai Vercel Git deployment, letakkan index.html sebagai file utama/root website.
+- File HTML tidak mereset counter database secara otomatis.
+- SQL reset hanya untuk dipakai setelah clear testing; jangan jalankan ketika transaksi asli sudah mulai dicatat.
+- Tidak ada perubahan pada Supabase Edge Function atau logika Live Sync.
