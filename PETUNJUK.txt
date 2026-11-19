@@ -1,25 +1,16 @@
-VDS LIVE SYNC – PERBAIKAN HEMAT REQUEST
+VDS - PERBAIKAN PEMBACAAN IZIN ARDI
 
-Isi paket:
-1. 1-VERCEL/index.html – ganti file frontend index.html di folder 1-VERCEL pada project GitHub/Vercel.
-2. 2-SUPABASE/001_realtime_repair.sql – jalankan SATU KALI di Supabase SQL Editor.
+Isi ZIP hanya file frontend yang diperlukan:
+- index.html                 -> untuk root repository GitHub/Vercel
+- 1-VERCEL/index.html        -> salinan identik untuk folder 1-VERCEL
 
-Yang diubah:
-- Realtime menjadi jalur utama; saat SUBSCRIBED tidak ada polling berkala.
-- Jika Realtime putus, fallback hanya memeriksa event tiap 60 detik (sebelumnya 30 detik).
-- Realtime mencoba menyambung kembali otomatis dengan jeda bertahap 5–60 detik.
-- Saat koneksi pulih, hanya satu kali catch-up event, bukan membaca seluruh state berulang kali.
-- SQL memastikan tabel event masuk publication Realtime dan policy SELECT memperbolehkan admin serta user sesuai izin website.
-- Tidak menghapus transaksi, riwayat, nomor, stok, atau data lain.
+CARA UPDATE:
+1. Backup index.html lama.
+2. Ganti index.html di ROOT repository GitHub dengan index.html dari ZIP.
+3. Jika repository juga menyimpan 1-VERCEL/index.html, ganti dengan file dari folder 1-VERCEL agar keduanya sama.
+4. Commit dan push, lalu tunggu Vercel deploy selesai.
+5. Buka VDS, lakukan Ctrl+Shift+R, lalu cek Manajemen Akun > Atur Izin Ardi.
 
-LANGKAH:
-A. Backup project VDS terlebih dahulu.
-B. Supabase Dashboard > SQL Editor > New query. Buka file 001_realtime_repair.sql, salin seluruh isinya, lalu Run satu kali.
-C. Di GitHub, ganti 1-VERCEL/index.html dengan file dari paket ini, commit ke branch main. Tunggu Vercel selesai deploy.
-D. Tutup tab VDS di semua komputer/HP, buka kembali domain, login ulang, lalu pilih website.
-E. Tes: buka Bidding di dua perangkat. Simpan satu transaksi dari perangkat A; transaksi harus muncul di perangkat B tanpa refresh. Ulangi di Dana Paramita.
-
-CATATAN:
-- Jangan jalankan SQL reset data testing.
-- Polling 60 detik hanya cadangan jika WebSocket Realtime tidak tersambung. Ketika Realtime aktif, polling berhenti.
-- Log Query Supabase adalah metrik pemindaian log, bukan kuota jumlah transaksi. Paket ini mengurangi request sinkronisasi aplikasi, tetapi angka Log Query juga dipengaruhi pembukaan/pencarian Logs di dashboard Supabase.
+Perbaikan: nama key permission dicocokkan tanpa membedakan huruf besar/kecil
+(misal SITEBIDDING dan siteBidding dianggap sebagai izin yang sama).
+Tidak ada perubahan SQL, Edge Function, data Supabase, atau kode Live Sync.
