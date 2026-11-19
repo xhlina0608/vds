@@ -9,3 +9,5 @@ Pemasangan:
 2. Ganti file 1-VERCEL/index.html pada project GitHub.
 3. Commit/push ke branch yang dipakai Vercel dan tunggu deploy selesai.
 4. Tes Dana Paramita: CASH + Belum Bayar harus ditolak; nama donatur kosong + Belum Bayar harus ditolak; nama donatur diisi + Belum Bayar boleh disimpan.
+
+Tambahan: Live Bidding dan Live Laporan Dana sekarang mengurutkan transaksi berdasarkan nomor nota terbesar ke terkecil (terbaru di atas).
