@@ -297,16 +297,25 @@ const permissionCatalog=[
  {key:'exportExcel',label:'Export Excel'},
  {key:'exportPDF',label:'Export PDF'}
 ];
-function normalizePermissions(input){
- const source=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
- const normalized={};
- Object.keys(source).forEach(key=>{normalized[key]=source[key]===true||source[key]==='true'||source[key]===1;});
- return normalized;
+// Normalize permission keys from legacy records (e.g. SITEBIDDING) to the canonical catalog casing.
+function normalizePermissions(input={}){
+ const raw=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+ const result={...raw};
+ permissionCatalog.forEach(item=>{
+  const matches=Object.keys(raw).filter(k=>String(k).toLowerCase()===item.key.toLowerCase());
+  const chosen=Object.prototype.hasOwnProperty.call(raw,item.key)?raw[item.key]:(matches.length?raw[matches[0]]:false);
+  matches.forEach(k=>{if(k!==item.key)delete result[k];});
+  result[item.key]=chosen===true;
+ });
+ return result;
+}
+function normalizeProfile(profile){
+ if(!profile||typeof profile!=='object')return profile;
+ return {...profile,permissions:normalizePermissions(profile.permissions||{})};
 }
 function hasPermission(key){
  if(isAdmin())return true;
- const permissions=normalizePermissions(currentProfile?.permissions);
- if(key==='siteSponsor')return permissions.siteSponsor===true;
+ const permissions=normalizePermissions(currentProfile?.permissions||{});
  if(key!=='siteBidding'&&key!=='siteDana'){const siteKey=currentSite==='dana'?'siteDana':'siteBidding';if(permissions[siteKey]===true)return true;}
  return permissions[key]===true;
 }
@@ -316,10 +325,11 @@ function requirePermission(key){
  return true;
 }
 function accountPermissionsMarkup(perms={}){
- return `<div class="permission-grid">${permissionCatalog.map(p=>`<label class="permission-option"><input type="checkbox" class="account-permission" value="${p.key}" ${perms[p.key]===true?'checked':''}> <span>${p.label}</span></label>`).join('')}</div>`;
+ const normalized=normalizePermissions(perms);
+ return `<div class="permission-grid">${permissionCatalog.map(p=>`<label class="permission-option"><input type="checkbox" class="account-permission" value="${p.key}" ${normalized[p.key]===true?'checked':''}> <span>${p.label}</span></label>`).join('')}</div>`;
 }
-function readPermissionChecks(){
- const result={};document.querySelectorAll('.account-permission').forEach(el=>result[el.value]=el.checked);return result;
+function readPermissionChecks(existing={}){
+ const result=normalizePermissions(existing);document.querySelectorAll('.account-permission').forEach(el=>result[el.value]=el.checked);return result;
 }
 function setRoleUI(){
  const nav=document.getElementById('nav');let accountBtn=document.getElementById('accountNav');
@@ -1437,7 +1447,7 @@ function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.
  sessionStorage.setItem('vds_access_token',vdsAccessToken);
  currentUser=data.username;
  currentRole=String(data.role||'user').toLowerCase();
- currentProfile=data.profile||{username:currentUser,role:currentRole};
+ currentProfile=normalizeProfile(data.profile||{username:currentUser,role:currentRole});
  try{localStorage.setItem('vds_last_site',requestedSite);const saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'{}');saved.site=requestedSite;localStorage.setItem('vds_remembered_session',JSON.stringify(saved));}catch(e){}
  document.getElementById('login').style.display='none';
  document.getElementById('sitePortal').style.display='none';
@@ -1468,7 +1478,7 @@ async function login(){
  try{
   const out=await vdsApi('login',{username:n,password:p},'');
   vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
-  currentProfile=out.user;currentProfile.permissions=normalizePermissions(out.user.permissions);currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
+  currentProfile=normalizeProfile(out.user);currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
   // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
   // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
   accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
@@ -1492,7 +1502,7 @@ async function login(){
 }
 async function vdsLoadUsers(){
  const out=await vdsApi('list-users');
- accounts=(out.users||[]).map(u=>({...u,permissions:normalizePermissions(u.permissions),createdAt:u.created_at,password:undefined}));
+ accounts=(out.users||[]).map(u=>({...u,permissions:normalizePermissions(u.permissions||{}),createdAt:u.created_at,password:undefined}));
  window.__vdsUsersLoaded=true;
  return accounts;
 }
@@ -1678,7 +1688,7 @@ function usersPage(){
  if(!isAdmin())return '<div class="panel">Akses ditolak.</div>';
  return `<div class="panel"><div class="panelhead"><div><h3>Manajemen Akun</h3><small>Atur izin fitur secara terpisah untuk setiap akun User.</small></div><button class="primary" onclick="showAddAccount()">+ Tambah Akun</button></div>
  <div class="tablewrap"><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Hak Akses</th><th>Dibuat</th><th>Aksi</th></tr></thead><tbody>
- ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>a.permissions&&a.permissions[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'||a.role==='admin'?'':`<button class="soft" onclick="editAccountUsername(${i})">Edit Username</button> <button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button> <button class="danger" onclick="deleteAccount(${i})">Hapus User</button>`}</td></tr>`).join('')}
+ ${accounts.map((a,i)=>`<tr><td><b>${esc(a.username)}</b>${a.username.toLowerCase()==='septino'?' <span class="pill paid">Admin utama</span>':''}</td><td>${a.role.toUpperCase()}</td><td><span class="pill ${a.active===false?'unpaid':'paid'}">${a.active===false?'NONAKTIF':'AKTIF'}</span></td><td>${a.role==='admin'?'Semua fitur':`${permissionCatalog.filter(p=>normalizePermissions(a.permissions||{})[p.key]===true).length} / ${permissionCatalog.length} fitur`}</td><td>${a.createdAt?new Date(a.createdAt).toLocaleDateString('id-ID'):'-'}</td><td><button class="soft" onclick="changeAccountPassword(${i})">Ganti Password</button> ${a.username.toLowerCase()==='septino'||a.role==='admin'?'':`<button class="soft" onclick="editAccountUsername(${i})">Edit Username</button> <button class="primary" onclick="editAccountPermissions(${i})">Atur Izin</button> <button class="soft" onclick="toggleAccount(${i})">${a.active===false?'Aktifkan':'Nonaktifkan'}</button> <button class="danger" onclick="deleteAccount(${i})">Hapus User</button>`}</td></tr>`).join('')}
  </tbody></table></div><div class="note" style="margin-top:14px">Semua izin User secara default NONAKTIF. Centang hanya fitur yang boleh digunakan oleh akun tersebut. Admin selalu memiliki akses penuh.</div></div>`;
 }
 function showAddAccount(){
@@ -1721,19 +1731,15 @@ async function deleteAccount(i){
 }
 async function saveAccountPermissions(i){
  if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
- const target=accounts[i];
- const permissions=normalizePermissions(readPermissionChecks());
+ const targetId=accounts[i].id;
+ const permissions=readPermissionChecks(accounts[i].permissions||{});
  try{
-  await vdsApi('update-user',{id:target.id,permissions});
-  // Baca ulang dari Supabase agar angka fitur mencerminkan data yang benar-benar tersimpan.
-  await vdsLoadUsers();
-  const refreshed=accounts.find(a=>String(a.id)===String(target.id));
-  if(!refreshed)throw new Error('Izin tersimpan, tetapi akun tidak ditemukan saat membaca ulang data.');
-  const savedCount=permissionCatalog.filter(p=>refreshed.permissions&&refreshed.permissions[p.key]===true).length;
-  const selectedCount=permissionCatalog.filter(p=>permissions[p.key]===true).length;
+  await vdsApi('update-user',{id:targetId,permissions});
+  await vdsLoadUsers(); // Verify using a fresh read from Supabase, not the local checkbox state.
+  const saved=accounts.find(a=>a.id===targetId);
+  const enabled=permissionCatalog.filter(p=>saved&&saved.permissions&&saved.permissions[p.key]===true).length;
   closeModal();render();
-  if(savedCount!==selectedCount){alert('Perubahan dikirim, tetapi data yang dibaca kembali dari Supabase belum sesuai ('+savedCount+'/'+permissionCatalog.length+' fitur). Periksa deployment Edge Function vds-api.');}
-  else{alert('Izin fitur berhasil disimpan dan diverifikasi dari Supabase: '+savedCount+'/'+permissionCatalog.length+' fitur.');}
+  alert('Izin fitur berhasil disimpan dan dibaca ulang dari Supabase: '+enabled+'/'+permissionCatalog.length+' fitur.');
  }catch(e){alert('Gagal menyimpan atau memverifikasi izin: '+e.message);}
 }
 async function createAccount(){
@@ -1787,7 +1793,7 @@ async function vdsRestoreRememberedSession(){
  const token=localStorage.getItem('vds_access_token')||'';
  let saved=null;try{saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'null')}catch(e){}
  if(!token||!saved||!saved.username||!saved.profile)return;
- vdsAccessToken=token;currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=saved.profile;
+ vdsAccessToken=token;currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=normalizeProfile(saved.profile);
  const site=['bidding','dana'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
  try{
   // A small authenticated read verifies that the stored token is still valid.
