@@ -118,6 +118,7 @@ let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getI
 let vdsSaveTimer=null, vdsSaving=false, vdsSaveAgain=false, vdsCloudLoaded={bidding:false,dana:false};
 // Low-egress live sync: receive only compact transaction events, not full app_state snapshots.
 let vdsRealtimeClient=null, vdsRealtimeChannel=null, vdsRealtimeSite='', vdsRealtimeGeneration=0;
+let vdsRealtimeRetryTimer=null, vdsRealtimeRetryDelay=5000, vdsRealtimeConnected=false;
 let vdsSyncPollTimer=null, vdsSyncPollBusy=false, vdsSyncPollSite='', vdsSyncEventCursor={bidding:0,dana:0};
 const vdsSeenSyncEventIds=new Set();
 function vdsStopSyncPolling(){
@@ -126,9 +127,20 @@ function vdsStopSyncPolling(){
 }
 function vdsStopRealtime(){
  vdsRealtimeGeneration++;
+ if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
+ vdsRealtimeConnected=false;
  if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
  vdsRealtimeChannel=null;vdsRealtimeSite='';
  vdsStopSyncPolling();vdsSyncPollBusy=false;
+}
+function vdsScheduleRealtimeRetry(site){
+ if(!site||site!==currentSite||!vdsAccessToken||vdsRealtimeRetryTimer)return;
+ const wait=vdsRealtimeRetryDelay;
+ vdsRealtimeRetryDelay=Math.min(60000,Math.round(vdsRealtimeRetryDelay*1.8));
+ vdsRealtimeRetryTimer=setTimeout(()=>{
+  vdsRealtimeRetryTimer=null;
+  if(site===currentSite&&vdsAccessToken&&!vdsRealtimeConnected)vdsStartRealtime(site);
+ },wait);
 }
 function recalculateCatalogProgressFromTransactions(){
  if(!Array.isArray(state.prices))state.prices=[];
@@ -186,33 +198,51 @@ function vdsStartSyncPolling(site){
  if(vdsSyncPollTimer&&vdsSyncPollSite===site)return;
  vdsStopSyncPolling();
  vdsSyncPollSite=site;
- // Fallback hanya saat Realtime tidak tersedia. Realtime normal tidak melakukan polling berkala.
+ // Cadangan hemat: hanya aktif saat Realtime gagal, maksimal satu pemeriksaan per 60 detik.
  vdsPollSyncEvents(site).catch(()=>{});
- vdsSyncPollTimer=setInterval(()=>{if(vdsSyncPollSite===site)vdsPollSyncEvents(site).catch(()=>{});},30000);
+ vdsSyncPollTimer=setInterval(()=>{if(vdsSyncPollSite===site)vdsPollSyncEvents(site).catch(()=>{});},60000);
 }
 async function vdsStartRealtime(site){
- if(!vdsAccessToken||!site)return;
+ if(!vdsAccessToken||!site||site!==currentSite)return;
  if(vdsRealtimeSite===site&&vdsRealtimeChannel)return;
- vdsStopRealtime();const generation=vdsRealtimeGeneration;vdsRealtimeSite=site;
- if(!window.supabase?.createClient){vdsStartSyncPolling(site);vdsSyncNote('Sinkronisasi cadangan aktif · memeriksa tiap 30 detik',3500);return;}
+ // Hentikan channel lama tanpa menghapus jadwal retry yang baru berjalan.
+ if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
+ vdsRealtimeChannel=null;vdsRealtimeSite=site;vdsRealtimeConnected=false;
+ const generation=++vdsRealtimeGeneration;
+ if(!window.supabase?.createClient){vdsStartSyncPolling(site);vdsSyncNote('Realtime tidak tersedia · cadangan cek tiap 60 detik',3500);vdsScheduleRealtimeRetry(site);return;}
  try{
   if(!vdsRealtimeClient)vdsRealtimeClient=window.supabase.createClient('https://gmpedvbzmgrpwsgsyszj.supabase.co',VDS_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},realtime:{params:{eventsPerSecond:2}}});
-  vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
-  let firstSubscribed=true;
+  await vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
   vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status)=>{
-   if(generation!==vdsRealtimeGeneration)return;
+   if(generation!==vdsRealtimeGeneration||site!==currentSite)return;
    if(status==='SUBSCRIBED'){
+    vdsRealtimeConnected=true;vdsRealtimeRetryDelay=5000;
+    if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
     vdsStopSyncPolling();
-    if(firstSubscribed){firstSubscribed=false;vdsSyncNote('Realtime terhubung · sinkronisasi aktif',2200);}
-    else{vdsPollSyncEvents(site).catch(e=>console.warn('Live sync reconnect:',e));}
+    vdsSyncNote('Realtime aktif · sinkronisasi langsung',2200);
+    // Satu kali catch-up saat koneksi pulih; bukan polling berulang.
+    vdsPollSyncEvents(site).catch(e=>console.warn('Live sync catch-up:',e));
    }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
-    vdsSyncNote('Realtime terputus · sinkronisasi cadangan aktif',3500);
+    vdsRealtimeConnected=false;
+    vdsSyncNote('Realtime mencoba tersambung kembali · cadangan aktif',3500);
     vdsStartSyncPolling(site);
+    if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
+    vdsRealtimeChannel=null;vdsRealtimeSite='';
+    vdsScheduleRealtimeRetry(site);
    }
   });
- }catch(e){console.warn('Realtime tidak tersedia:',e);vdsStartSyncPolling(site);vdsSyncNote('Realtime tidak tersedia · sinkronisasi cadangan aktif',3500);}
+ }catch(e){
+  console.warn('Realtime tidak tersedia:',e);
+  vdsRealtimeConnected=false;vdsRealtimeChannel=null;vdsRealtimeSite='';
+  vdsStartSyncPolling(site);vdsSyncNote('Realtime gagal · mencoba ulang otomatis',3500);vdsScheduleRealtimeRetry(site);
+ }
 }
-window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&vdsSyncPollSite&&vdsSyncPollSite===currentSite)vdsPollSyncEvents(vdsSyncPollSite).catch(()=>{});});
+window.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&currentSite&&vdsAccessToken){
+  if(vdsSyncPollSite===currentSite)vdsPollSyncEvents(currentSite).catch(()=>{});
+  if(!vdsRealtimeConnected&&!vdsRealtimeRetryTimer)vdsScheduleRealtimeRetry(currentSite);
+ }
+});
 async function vdsCatchupTransactions(site){
  if(site!==currentSite||!vdsAccessToken)return;
  const out=await vdsApi('get-state',{site});if(!out.state)return;
@@ -267,9 +297,16 @@ const permissionCatalog=[
  {key:'exportExcel',label:'Export Excel'},
  {key:'exportPDF',label:'Export PDF'}
 ];
+function normalizePermissions(input){
+ const source=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+ const normalized={};
+ Object.keys(source).forEach(key=>{normalized[key]=source[key]===true||source[key]==='true'||source[key]===1;});
+ return normalized;
+}
 function hasPermission(key){
  if(isAdmin())return true;
- const permissions=currentProfile?.permissions||{};
+ const permissions=normalizePermissions(currentProfile?.permissions);
+ if(key==='siteSponsor')return permissions.siteSponsor===true;
  if(key!=='siteBidding'&&key!=='siteDana'){const siteKey=currentSite==='dana'?'siteDana':'siteBidding';if(permissions[siteKey]===true)return true;}
  return permissions[key]===true;
 }
@@ -1431,7 +1468,7 @@ async function login(){
  try{
   const out=await vdsApi('login',{username:n,password:p},'');
   vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
-  currentProfile=out.user;currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
+  currentProfile=out.user;currentProfile.permissions=normalizePermissions(out.user.permissions);currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
   // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
   // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
   accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
@@ -1455,7 +1492,7 @@ async function login(){
 }
 async function vdsLoadUsers(){
  const out=await vdsApi('list-users');
- accounts=(out.users||[]).map(u=>({...u,createdAt:u.created_at,password:undefined}));
+ accounts=(out.users||[]).map(u=>({...u,permissions:normalizePermissions(u.permissions),createdAt:u.created_at,password:undefined}));
  window.__vdsUsersLoaded=true;
  return accounts;
 }
@@ -1684,9 +1721,20 @@ async function deleteAccount(i){
 }
 async function saveAccountPermissions(i){
  if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
- const permissions=readPermissionChecks();
- try{await vdsApi('update-user',{id:accounts[i].id,permissions});accounts[i].permissions=permissions;closeModal();render();alert('Izin fitur berhasil disimpan.');}
- catch(e){alert('Gagal menyimpan izin: '+e.message);}
+ const target=accounts[i];
+ const permissions=normalizePermissions(readPermissionChecks());
+ try{
+  await vdsApi('update-user',{id:target.id,permissions});
+  // Baca ulang dari Supabase agar angka fitur mencerminkan data yang benar-benar tersimpan.
+  await vdsLoadUsers();
+  const refreshed=accounts.find(a=>String(a.id)===String(target.id));
+  if(!refreshed)throw new Error('Izin tersimpan, tetapi akun tidak ditemukan saat membaca ulang data.');
+  const savedCount=permissionCatalog.filter(p=>refreshed.permissions&&refreshed.permissions[p.key]===true).length;
+  const selectedCount=permissionCatalog.filter(p=>permissions[p.key]===true).length;
+  closeModal();render();
+  if(savedCount!==selectedCount){alert('Perubahan dikirim, tetapi data yang dibaca kembali dari Supabase belum sesuai ('+savedCount+'/'+permissionCatalog.length+' fitur). Periksa deployment Edge Function vds-api.');}
+  else{alert('Izin fitur berhasil disimpan dan diverifikasi dari Supabase: '+savedCount+'/'+permissionCatalog.length+' fitur.');}
+ }catch(e){alert('Gagal menyimpan atau memverifikasi izin: '+e.message);}
 }
 async function createAccount(){
  if(!isAdmin())return;

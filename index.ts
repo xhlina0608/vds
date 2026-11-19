@@ -151,15 +151,50 @@ Deno.serve(async (req) => {
     }
 
     if (action === "update-user") {
-      await requireAdmin(req);
+      const actor = await requireAdmin(req);
       const id = String(body.id || "");
       const updates: any = {};
+      if (!id) return reply({ error: "User ID wajib diisi." }, 400);
       if (typeof body.active === "boolean") updates.active = body.active;
       if (body.permissions && typeof body.permissions === "object") updates.permissions = body.permissions;
+      if (body.username !== undefined) {
+        const username = String(body.username || "").trim().toLowerCase();
+        if (!validUsername(username)) return reply({ error: "Username harus 3–24 karakter: huruf, angka, titik, _ atau -." }, 400);
+        if (id === actor.user.id || username === "septino") return reply({ error: "Username akun Admin utama atau akun yang sedang digunakan tidak dapat diubah dari menu ini." }, 403);
+        const { data: target, error: targetErr } = await adminDb.from("profiles").select("id,username,role").eq("id", id).single();
+        if (targetErr || !target) return reply({ error: "Akun tidak ditemukan." }, 404);
+        if (String(target.role).toLowerCase() === "admin") return reply({ error: "Username akun Admin tidak dapat diubah dari menu User." }, 403);
+        const { data: duplicate, error: dupErr } = await adminDb.from("profiles").select("id").eq("username", username).neq("id", id).limit(1);
+        if (dupErr) throw dupErr;
+        if (duplicate?.length) return reply({ error: "Username sudah digunakan." }, 409);
+        const { error: authErr } = await adminDb.auth.admin.updateUserById(id, {
+          email: internalEmail(username), user_metadata: { username }, email_confirm: true,
+        });
+        if (authErr) throw authErr;
+        updates.username = username;
+      }
+      if (Object.keys(updates).length) {
+        const { error } = await adminDb.from("profiles").update(updates).eq("id", id);
+        if (error) throw error;
+      }
+      // Return the persisted permissions so the frontend can verify the saved feature count.
+      const { data: savedProfile, error: savedErr } = await adminDb.from("profiles").select("id,username,role,active,permissions").eq("id", id).single();
+      if (savedErr) throw savedErr;
+      return reply({ ok: true, user: savedProfile, permissions: savedProfile?.permissions || {} });
+    }
+
+    if (action === "delete-user") {
+      const actor = await requireAdmin(req);
+      const id = String(body.id || "");
       if (!id) return reply({ error: "User ID wajib diisi." }, 400);
-      const { error } = await adminDb.from("profiles").update(updates).eq("id", id);
+      if (id === actor.user.id) return reply({ error: "Anda tidak dapat menghapus akun yang sedang digunakan." }, 403);
+      const { data: target, error: targetErr } = await adminDb.from("profiles").select("id,username,role").eq("id", id).single();
+      if (targetErr || !target) return reply({ error: "Akun tidak ditemukan." }, 404);
+      if (String(target.username || "").toLowerCase() === "septino" || String(target.role || "").toLowerCase() === "admin")
+        return reply({ error: "Akun Admin dilindungi dan tidak dapat dihapus dari menu ini." }, 403);
+      const { error } = await adminDb.auth.admin.deleteUser(id);
       if (error) throw error;
-      return reply({ ok: true });
+      return reply({ ok: true, deleted_username: target.username });
     }
 
     if (action === "reset-password") {
@@ -196,11 +231,19 @@ Deno.serve(async (req) => {
       const site = normalizeSite(body);
       await requireSiteAccess(req, site);
       const afterId = Math.max(0, Number(body.after_id || 0));
-      const { data, error } = await adminDb.from("vds_sync_events")
+      // A fresh browser starts with cursor 0. Never replay transaction events
+      // created before the latest explicit testing reset.
+      const { data: appState, error: stateError } = await adminDb.from("app_state")
+        .select("payload").eq("site", site).maybeSingle();
+      if (stateError) throw stateError;
+      const resetAt = appState?.payload?._testing_reset_at;
+      let eventsQuery = adminDb.from("vds_sync_events")
         .select("id,site,event_payload,created_at")
         .eq("site", site).gt("id", afterId).order("id", { ascending: true }).limit(100);
+      if (typeof resetAt === "string" && resetAt) eventsQuery = eventsQuery.gt("created_at", resetAt);
+      const { data, error } = await eventsQuery;
       if (error) throw error;
-      return reply({ ok: true, events: data || [] });
+      return reply({ ok: true, events: data || [], reset_at: resetAt || null });
     }
 
     if (action === "get-shared-inventory" || action === "save-shared-inventory" || action === "admin-save-shared-inventory") {
@@ -244,6 +287,64 @@ Deno.serve(async (req) => {
       });
       if (error) throw error;
       return reply({ ok: true, inventory: cleanInventory });
+    }
+
+    if (action === "admin-clear-testing-data") {
+      const site = normalizeSite(body);
+      if (site !== "bidding" && site !== "dana")
+        return reply({ error: "Website tidak valid." }, 400);
+      const actor = await requireSiteAccess(req, site);
+      if (!isAdmin(actor.profile))
+        return reply({ error: "Hanya Admin yang dapat menghapus data testing." }, 403);
+
+      // Read current cloud payload, preserving master data and all settings.
+      const { data: current, error: readError } = await adminDb.from("app_state")
+        .select("payload").eq("site", site).maybeSingle();
+      if (readError) throw readError;
+      if (!current?.payload || typeof current.payload !== "object")
+        return reply({ error: "Data website tidak ditemukan; penghapusan dibatalkan." }, 404);
+
+      const payload: Record<string, any> = { ...current.payload };
+      payload.transactions = [];
+      payload.history = [];
+      // Reset bidding counters while retaining the master item and stock values.
+      if (Array.isArray(payload.items)) {
+        payload.items = payload.items.map((item: any) => ({
+          ...item, bid: 0, sum: 0, return: null,
+          remain: Number(item.remain ?? item.stock ?? 0)
+        }));
+      }
+      payload._testing_reset_at = new Date().toISOString();
+
+      // Clear old replayable transaction events. Keep only the newest inventory snapshot.
+      const { data: snapshots, error: snapshotReadError } = await adminDb.from("vds_sync_events")
+        .select("event_payload").eq("site", site)
+        .contains("event_payload", { kind: "site_inventory_snapshot", site })
+        .order("id", { ascending: false }).limit(1);
+      if (snapshotReadError) throw snapshotReadError;
+      const { error: deleteEventsError } = await adminDb.from("vds_sync_events")
+        .delete().eq("site", site);
+      if (deleteEventsError) throw deleteEventsError;
+      if (snapshots?.[0]?.event_payload) {
+        const { error: restoreSnapshotError } = await adminDb.from("vds_sync_events").insert({
+          site, event_payload: snapshots[0].event_payload
+        });
+        if (restoreSnapshotError) throw restoreSnapshotError;
+      }
+
+      // Direct UPDATE deliberately bypasses merge_vds_app_state array-union behavior.
+      const { data: saved, error: saveError } = await adminDb.from("app_state")
+        .update({ payload, updated_by: actor.user.id, updated_at: new Date().toISOString() })
+        .eq("site", site).select("payload").single();
+      if (saveError) throw saveError;
+      const txCount = Array.isArray(saved?.payload?.transactions) ? saved.payload.transactions.length : -1;
+      const historyCount = Array.isArray(saved?.payload?.history) ? saved.payload.history.length : -1;
+      const resetAt = saved?.payload?._testing_reset_at;
+      if (txCount !== 0 || historyCount !== 0 || !resetAt)
+        throw new Error("Verifikasi reset gagal: data cloud belum kosong.");
+
+      return reply({ ok: true, site, reset_at: resetAt, transactions: txCount, history: historyCount,
+        message: "Data testing berhasil dihapus dan diverifikasi langsung dari database." });
     }
 
     if (action === "admin-clear-all-operational-data") {
@@ -330,11 +431,22 @@ Deno.serve(async (req) => {
         const tx = syncEvent.transaction;
         const hist = syncEvent.history;
         if (tx.id && hist.id) {
-          const { error: eventError } = await adminDb.from("vds_sync_events").insert({
-            site,
-            event_payload: { transaction: tx, history: hist },
-          });
-          if (eventError) throw eventError;
+          // save-state may be called by a tab that had a transaction event in
+          // flight while Admin performed a reset. The SQL merge protects the
+          // app_state arrays, but the event stream must apply the same fence.
+          const { data: latestState, error: latestStateError } = await adminDb.from("app_state")
+            .select("payload").eq("site", site).maybeSingle();
+          if (latestStateError) throw latestStateError;
+          const resetAt = Date.parse(String(latestState?.payload?._testing_reset_at || ""));
+          const eventAt = Date.parse(String(tx.updatedAt || hist.timestamp || ""));
+          const isAfterReset = !Number.isFinite(resetAt) || (Number.isFinite(eventAt) && eventAt > resetAt);
+          if (isAfterReset) {
+            const { error: eventError } = await adminDb.from("vds_sync_events").insert({
+              site,
+              event_payload: { transaction: tx, history: hist },
+            });
+            if (eventError) throw eventError;
+          }
         }
       }
       return reply({ ok: true });
