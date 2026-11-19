@@ -12,3 +12,6 @@ Instalasi:
 - Ekstrak ZIP ke root repository GitHub, bukan ke dalam subfolder.
 - Pastikan index.html berada langsung di root repository.
 - Commit/push, lalu tunggu Vercel deployment berstatus Ready.
+
+
+FIX V2: halaman Tambah & Retur Barang sekarang mengunci viewport browser dan memakai scroll internal pada area konten. Perbaikan mencakup tinggi grid minmax(0,1fr), min-height:0, box-sizing:border-box, serta scroll pada #content[data-page=inventory], desktop dan mobile.
