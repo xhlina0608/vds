@@ -118,14 +118,55 @@ let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getI
 let vdsSaveTimer=null, vdsSaving=false, vdsSaveAgain=false, vdsCloudLoaded={bidding:false,dana:false};
 // Low-egress live sync: receive only compact transaction events, not full app_state snapshots.
 let vdsRealtimeClient=null, vdsRealtimeChannel=null, vdsRealtimeSite='', vdsRealtimeGeneration=0;
+let vdsRealtimeRetryTimer=null, vdsRealtimeRetryDelay=5000, vdsRealtimeConnected=false;
 let vdsSyncPollTimer=null, vdsSyncPollBusy=false, vdsSyncPollSite='', vdsSyncEventCursor={bidding:0,dana:0};
 const vdsSeenSyncEventIds=new Set();
+function vdsStopSyncPolling(){
+ if(vdsSyncPollTimer){clearInterval(vdsSyncPollTimer);vdsSyncPollTimer=null;}
+ vdsSyncPollSite='';
+}
 function vdsStopRealtime(){
  vdsRealtimeGeneration++;
+ if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
+ vdsRealtimeConnected=false;
  if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
  vdsRealtimeChannel=null;vdsRealtimeSite='';
- if(vdsSyncPollTimer){clearInterval(vdsSyncPollTimer);vdsSyncPollTimer=null;}
- vdsSyncPollSite='';vdsSyncPollBusy=false;
+ vdsStopSyncPolling();vdsSyncPollBusy=false;
+}
+function vdsScheduleRealtimeRetry(site){
+ if(!site||site!==currentSite||!vdsAccessToken||vdsRealtimeRetryTimer)return;
+ const wait=vdsRealtimeRetryDelay;
+ vdsRealtimeRetryDelay=Math.min(60000,Math.round(vdsRealtimeRetryDelay*1.8));
+ vdsRealtimeRetryTimer=setTimeout(()=>{
+  vdsRealtimeRetryTimer=null;
+  if(site===currentSite&&vdsAccessToken&&!vdsRealtimeConnected)vdsStartRealtime(site);
+ },wait);
+}
+function recalculateCatalogProgressFromTransactions(){
+ if(!Array.isArray(state.prices))state.prices=[];
+ if(!Array.isArray(state.items))state.items=[];
+ const totals=new Map();
+ for(const tx of (state.transactions||[])){
+  const key=String(tx.itemName||'').trim().toLocaleLowerCase('id-ID');
+  if(!key)continue;
+  const current=totals.get(key)||{bid:0,sum:0};
+  current.bid+=Math.max(0,Number(tx.qty||0));
+  current.sum+=Number(tx.total??(Number(tx.price||0)*Number(tx.qty||0)));
+  totals.set(key,current);
+ }
+ for(const product of state.prices){
+  const key=String(product.name||'').trim().toLocaleLowerCase('id-ID');
+  if(!key)continue;
+  const total=totals.get(key)||{bid:0,sum:0};
+  const stock=Math.max(0,Number(product.stock||0));
+  let progress=state.items.find(x=>String(x.name||'').trim().toLocaleLowerCase('id-ID')===key);
+  if(!progress){progress={no:product.no||state.items.length+1,name:product.name,stock,bid:0,remain:stock,sum:0,return:null};state.items.push(progress);}
+  progress.name=product.name;
+  progress.stock=stock;
+  progress.bid=total.bid;
+  progress.remain=stock-total.bid;
+  progress.sum=total.sum;
+ }
 }
 function vdsMergeRealtimeEvent(row){
  const payload=row&&row.event_payload;if(!payload||!state||row.site!==currentSite)return;
@@ -138,9 +179,10 @@ function vdsMergeRealtimeEvent(row){
  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
  const i=state.transactions.findIndex(x=>String(x.id)===String(tx.id));
  if(i<0)state.transactions.push(tx);else if(String(state.transactions[i].updatedAt||'')<String(tx.updatedAt||''))state.transactions[i]=tx;
+ recalculateCatalogProgressFromTransactions();
  if(hist&&hist.id){state.history=Array.isArray(state.history)?state.history:[];if(!state.history.some(x=>String(x.id)===String(hist.id)))state.history.push(hist);}
  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}
- if(currentPage==='transactions'||currentPage==='invoice'||currentPage==='dashboard'||currentPage==='history')render();
+ if(currentPage==='transactions'||currentPage==='invoice'||currentPage==='dashboard'||currentPage==='history'||currentPage==='prices'||currentPage==='items')render();
 }
 async function vdsPollSyncEvents(site){
  if(!vdsAccessToken||!site||site!==currentSite||document.visibilityState==='hidden'||vdsSyncPollBusy)return;
@@ -153,36 +195,60 @@ async function vdsPollSyncEvents(site){
  finally{vdsSyncPollBusy=false;}
 }
 function vdsStartSyncPolling(site){
- if(vdsSyncPollTimer)clearInterval(vdsSyncPollTimer);
+ if(vdsSyncPollTimer&&vdsSyncPollSite===site)return;
+ vdsStopSyncPolling();
  vdsSyncPollSite=site;
- // Fallback ringan: hanya mengambil event transaksi baru, bukan seluruh snapshot app_state.
+ // Cadangan hemat: hanya aktif saat Realtime gagal, maksimal satu pemeriksaan per 60 detik.
  vdsPollSyncEvents(site).catch(()=>{});
- vdsSyncPollTimer=setInterval(()=>{if(vdsSyncPollSite===site)vdsPollSyncEvents(site).catch(()=>{});},5000);
+ vdsSyncPollTimer=setInterval(()=>{if(vdsSyncPollSite===site)vdsPollSyncEvents(site).catch(()=>{});},60000);
 }
 async function vdsStartRealtime(site){
- if(!vdsAccessToken||!site)return;
- if(vdsRealtimeSite===site&&vdsRealtimeChannel){vdsStartSyncPolling(site);return;}
- vdsStopRealtime();const generation=vdsRealtimeGeneration;vdsRealtimeSite=site;
- vdsStartSyncPolling(site);
- if(!window.supabase?.createClient){vdsSyncNote('Sinkronisasi cadangan aktif · memeriksa tiap 5 detik',3500);return;}
+ if(!vdsAccessToken||!site||site!==currentSite)return;
+ if(vdsRealtimeSite===site&&vdsRealtimeChannel)return;
+ // Hentikan channel lama tanpa menghapus jadwal retry yang baru berjalan.
+ if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
+ vdsRealtimeChannel=null;vdsRealtimeSite=site;vdsRealtimeConnected=false;
+ const generation=++vdsRealtimeGeneration;
+ if(!window.supabase?.createClient){vdsStartSyncPolling(site);vdsSyncNote('Realtime tidak tersedia · cadangan cek tiap 60 detik',3500);vdsScheduleRealtimeRetry(site);return;}
  try{
   if(!vdsRealtimeClient)vdsRealtimeClient=window.supabase.createClient('https://gmpedvbzmgrpwsgsyszj.supabase.co',VDS_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false},realtime:{params:{eventsPerSecond:2}}});
-  vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
-  let firstSubscribed=true;
+  await vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
   vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status)=>{
-   if(generation!==vdsRealtimeGeneration)return;
-   if(status==='SUBSCRIBED'){if(firstSubscribed){firstSubscribed=false;vdsSyncNote('Realtime terhubung · sinkronisasi aktif',2200);}else{vdsPollSyncEvents(site).catch(e=>console.warn('Live sync reconnect:',e));}}
-   else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')vdsSyncNote('Realtime terputus · sinkronisasi cadangan tetap aktif',3500);
+   if(generation!==vdsRealtimeGeneration||site!==currentSite)return;
+   if(status==='SUBSCRIBED'){
+    vdsRealtimeConnected=true;vdsRealtimeRetryDelay=5000;
+    if(vdsRealtimeRetryTimer){clearTimeout(vdsRealtimeRetryTimer);vdsRealtimeRetryTimer=null;}
+    vdsStopSyncPolling();
+    vdsSyncNote('Realtime aktif · sinkronisasi langsung',2200);
+    // Satu kali catch-up saat koneksi pulih; bukan polling berulang.
+    vdsPollSyncEvents(site).catch(e=>console.warn('Live sync catch-up:',e));
+   }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+    vdsRealtimeConnected=false;
+    vdsSyncNote('Realtime mencoba tersambung kembali · cadangan aktif',3500);
+    vdsStartSyncPolling(site);
+    if(vdsRealtimeChannel&&vdsRealtimeClient){try{vdsRealtimeClient.removeChannel(vdsRealtimeChannel)}catch(e){}}
+    vdsRealtimeChannel=null;vdsRealtimeSite='';
+    vdsScheduleRealtimeRetry(site);
+   }
   });
- }catch(e){console.warn('Realtime tidak tersedia:',e);vdsSyncNote('Realtime tidak tersedia · sinkronisasi cadangan aktif',3500);}
+ }catch(e){
+  console.warn('Realtime tidak tersedia:',e);
+  vdsRealtimeConnected=false;vdsRealtimeChannel=null;vdsRealtimeSite='';
+  vdsStartSyncPolling(site);vdsSyncNote('Realtime gagal · mencoba ulang otomatis',3500);vdsScheduleRealtimeRetry(site);
+ }
 }
-window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&vdsSyncPollSite&&vdsSyncPollSite===currentSite)vdsPollSyncEvents(vdsSyncPollSite).catch(()=>{});});
+window.addEventListener('visibilitychange',()=>{
+ if(document.visibilityState==='visible'&&currentSite&&vdsAccessToken){
+  if(vdsSyncPollSite===currentSite)vdsPollSyncEvents(currentSite).catch(()=>{});
+  if(!vdsRealtimeConnected&&!vdsRealtimeRetryTimer)vdsScheduleRealtimeRetry(currentSite);
+ }
+});
 async function vdsCatchupTransactions(site){
  if(site!==currentSite||!vdsAccessToken)return;
  const out=await vdsApi('get-state',{site});if(!out.state)return;
  const incoming=out.state;const byId=new Map((state.transactions||[]).map(x=>[String(x.id),x]));
  for(const tx of (incoming.transactions||[])){const old=byId.get(String(tx.id));if(!old||String(old.updatedAt||'')<String(tx.updatedAt||''))byId.set(String(tx.id),tx);}
- state.transactions=[...byId.values()];const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
+ state.transactions=[...byId.values()];recalculateCatalogProgressFromTransactions();const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}render();
 }
 async function vdsApi(action, data={}, token=vdsAccessToken){
@@ -291,6 +357,7 @@ async function vdsPublishTransactionUpdate(transaction, historyEntry){
 }
 function dashboard(){return `<div class="cards"><div class="card"><small>Total Dana Bidding</small><strong>${money(total())}</strong></div><div class="card"><small>Total Transaksi</small><strong>${state.transactions.length}</strong></div><div class="card"><small>Total Cash</small><strong>${money(paid('CASH'))}</strong></div><div class="card"><small>Belum Dibayar</small><strong>${money(unpaid())}</strong></div></div><div class="panel"><div class="panelhead"><h3>Aktivitas Transaksi Terbaru</h3><button class="primary" onclick="go('transactions')">Buka Live Laporan Dana</button></div>${transactionTable(state.transactions.slice(-8).reverse())}</div><div class="note">Prototype tahap awal. Data contoh master diambil dari workbook. Transaksi baru yang dimasukkan di sini tersimpan pada browser/perangkat ini saja sampai database online diaktifkan.</div>`}
 function catalogPage(){
+ recalculateCatalogProgressFromTransactions();
  const allowed=isAdmin()||hasPermission('prices')||hasPermission('items');
  const rows=state.prices||[];
  return `<div class="panel"><div class="panelhead"><div><h3>Daftar Harga & Item</h3><small>Kelola nama barang, stok, harga, dan ringkasan bidding dalam satu tempat.</small></div><div class="toolbar"><input placeholder="Cari nama barang..." oninput="filterTable(this)"><button class="soft" onclick="exportCatalogPDF()" ${(isAdmin()||hasPermission('prices')||hasPermission('items'))?'':'style="display:none"'}>Download PDF Daftar Harga</button>${isAdmin()?`<button class="primary" onclick="addRow('catalog')">+ Tambah Barang</button>`:''}</div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Stok</th><th>Harga</th><th>Total Bidding</th><th>Sisa Stok</th><th>Total Nilai</th><th>Aksi</th></tr></thead><tbody id="dataRows">${rows.map((r,i)=>{const it=(state.items||[]).find(x=>String(x.name).toLowerCase()===String(r.name).toLowerCase())||{};return `<tr><td>${i+1}</td><td><b>${esc(r.name||'')}</b></td><td>${Number(r.stock||0)}</td><td>${money(r.price||0)}</td><td>${Number(it.bid||0)}</td><td>${Number(it.remain??r.stock??0)}</td><td>${money(it.sum||0)}</td><td>${isAdmin()?`<button class="soft" onclick="editRow('catalog',${i})">Edit</button> <button class="danger" onclick="deleteCatalogItem(${i})">Hapus</button>`:'-'}</td></tr>`}).join('')}</tbody></table></div></div>`;
@@ -545,9 +612,9 @@ async function saveSharedInventoryAdmin(next){
 }
 
 function transactionSortValue(value){const digits=String(value??'').replace(/[^0-9]/g,'');return digits?Number(digits):Number.MAX_SAFE_INTEGER;}
-function sortedTransactionsByOrder(rows=state.transactions){return [...(rows||[])].sort((a,b)=>{const an=transactionSortValue(a.bidNo),bn=transactionSortValue(b.bidNo);if(an!==bn)return an-bn;const ai=transactionSortValue(a.invoice),bi=transactionSortValue(b.invoice);if(ai!==bi)return ai-bi;return String(a.createdAt||'').localeCompare(String(b.createdAt||''));});}
+function sortedTransactionsByOrder(rows=state.transactions){return [...(rows||[])].sort((a,b)=>{const ai=transactionSortValue(a.invoice),bi=transactionSortValue(b.invoice);if(ai!==bi)return bi-ai;const an=transactionSortValue(a.bidNo),bn=transactionSortValue(b.bidNo);if(an!==bn)return bn-an;return String(b.createdAt||'').localeCompare(String(a.createdAt||''));});}
 function transactionTable(rows){if(!rows.length)return '<div class="empty">Belum ada transaksi. Klik Tambah Transaksi untuk mulai.</div>';return `<div class="tablewrap"><table><thead><tr><th>No. Nota</th><th>${currentSite==='dana'?'ORDER NO':'BID NO'}</th><th>Nama Barang</th><th>Bidder</th><th>Nominal</th><th>Qty</th><th>Total</th><th>Petugas</th><th>Pembayaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(t=>`<tr><td>${t.invoice}</td><td>${esc(t.bidNo)}</td><td>${esc(t.itemName)}</td><td>${esc(t.bidder)}</td><td>${money(t.price)}</td><td>${t.qty}</td><td><b>${money(t.total)}</b></td><td>${esc(t.staff||'-')}</td><td><span class="pill ${t.payment?'paid':'unpaid'}">${t.payment||'BELUM BAYAR'}</span></td><td><button class="primary" onclick="showPaymentOptions('${t.id}')">${t.payment?'Ganti Bayar':'BAYAR'}</button> <button class="soft" onclick="editTransaction('${t.id}')">Edit</button> <button class="soft" onclick="openInvoice('${t.id}')">Nota</button></td></tr>`).join('')}</tbody></table></div>`}
-function transactionsPage(){const extra=(method)=>state.transactions.filter(t=>String(t.payment||'').toUpperCase()===method).reduce((n,t)=>n+Number(t.overpay||0),0);return `<div class="cards" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:14px"><div class="card"><small>LEBIH BAYAR CASH</small><strong>${money(extra('CASH'))}</strong></div><div class="card"><small>LEBIH BAYAR TRANSFER</small><strong>${money(extra('TRANSFER'))}</strong></div><div class="card"><small>LEBIH BAYAR QRIS</small><strong>${money(extra('QRIS'))}</strong></div></div><div class="panel"><div class="panelhead"><h3>${currentSite==='dana'?'Live Laporan Dana':'Live Bidding'}</h3><button class="primary" onclick="transactionForm()">+ Tambah Transaksi</button></div>${transactionTable(sortedTransactionsByOrder())}</div>`}
+function transactionsPage(){return `<div class="panel"><div class="panelhead"><h3>${currentSite==='dana'?'Live Laporan Dana':'Live Bidding'}</h3><button class="primary" onclick="transactionForm()">+ Tambah Transaksi</button></div>${transactionTable(sortedTransactionsByOrder())}</div>`}
 
 
 function showPaymentOptions(id){const t=state.transactions.find(x=>x.id===id);if(!t)return;document.getElementById('modalTitle').textContent='Pilih Metode Pembayaran';document.getElementById('modalBody').innerHTML=`<div style="display:flex;gap:12px;flex-wrap:wrap"><button class="primary" style="flex:1;min-width:130px;padding:18px" onclick="setPayment('${id}','CASH')">💵 CASH</button><button class="primary" style="flex:1;min-width:130px;padding:18px" onclick="setPayment('${id}','TRANSFER')">🏦 TRANSFER</button><button class="primary" style="flex:1;min-width:130px;padding:18px" onclick="setPayment('${id}','QRIS')">▦ QRIS</button></div><div class="note" style="margin-top:12px">Invoice ${esc(t.invoice)} · ${esc(t.bidder)} · ${money(t.total)}<br>Status saat ini: ${esc(t.payment||'BELUM BAYAR')}</div><div class="toolbar" style="justify-content:flex-end;margin-top:14px"><button class="soft" onclick="closeModal()">Batal</button></div>`;document.getElementById('modal').classList.add('show')}
@@ -1247,8 +1314,29 @@ function updateInvoiceCopyField(id,copyIndex,field,value){
  persist();
 }
 function updateInvoiceInline(id,field,value){if(!isAdmin()){alert('User hanya dapat mencetak nota.');return}const t=state.transactions.find(x=>x.id===id);if(!t)return;const before=JSON.stringify(t);const v=String(value??'').trim();if(field==='amount'){const n=Number(v.replace(/[^0-9,-]/g,'').replace(/\./g,'').replace(',','.'));if(Number.isFinite(n))t.total=n;}else if(field==='item'){const cleaned=v.replace(/^NO\.\s*/i,'');const parts=cleaned.split(/\s+-\s+/,2);if(parts.length===2){t.bidNo=parts[0].trim();t.itemName=parts[1].trim()}else t.itemName=cleaned;}else if(field==='no')t.invoice=v;else if(field==='date')t.date=v;else t[field]=v;if(before===JSON.stringify(t))return;t.updatedAt=new Date().toISOString();state.history=state.history||[];const h={id:crypto.randomUUID(),action:'EDIT INVOICE',timestamp:new Date().toISOString(),user:currentUser,invoice:t.invoice,bidNo:t.bidNo,itemName:t.itemName,bidder:t.bidder,price:t.price,qty:t.qty,total:t.total,payment:t.payment||'',note:'Perubahan kolom nota: '+field};state.history.push(h);persist();vdsPublishTransactionUpdate(t,h);}
-function transactionForm(id){const t=id?state.transactions.find(x=>x.id===id):null;const opts=state.prices.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');const isDana=currentSite==='dana';const isCashDonor=isDana&&String(t?.bidder||'').trim().toUpperCase()==='CASH';document.getElementById('modalTitle').textContent=t?'Edit Transaksi':'Tambah Transaksi';document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field"><label>${isDana?'ORDER NO':'BID NO'} (OTOMATIS)</label><input id="fBid" value="${esc(t?.bidNo||nextBidNo())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor resmi dikunci oleh cloud saat Simpan agar tidak bentrok dengan pengguna lain.</small></div><div class="field"><label>Nomor Nota (OTOMATIS)</label><input id="fInvoice" value="${esc(t?.invoice||nextInvoice())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor nota dibuat otomatis oleh sistem dan tidak dapat diubah.</small></div><div class="field"><label>Nomor Item</label><input id="fItemNo" type="number" min="1" step="1" placeholder="Masukkan nomor" oninput="syncItemNameFromNumber();syncDanaItemPrice();previewOverpay()"><small style="color:#64748b">Gunakan nomor pada kolom No di Daftar Harga & Item.</small></div><div class="field"><label>Nama Barang</label><select id="fItem" onchange="syncItemNumberFromName();syncDanaItemPrice();previewOverpay()"><option value="">Pilih barang</option>${opts}</select></div>${isDana?`<div class="field full"><label>Nama Donatur</label><div style="display:grid;grid-template-columns:minmax(105px,.72fr) minmax(0,1.55fr);gap:10px"><button type="button" id="fDonorCash" class="${isCashDonor?'primary':'soft'}" aria-pressed="${isCashDonor}" onclick="setDonorCash()" style="min-height:42px">CASH</button><input id="fBidder" value="${isCashDonor?'':esc(t?.bidder||'')}" placeholder="Masukkan nama donatur" ${isCashDonor?'readonly':''} onfocus="clearDonorCash()"></div><small style="color:#64748b">Pilih CASH jika pembeli tidak perlu dicatat namanya.</small></div>`:`<div class="field full"><label>Nama Bidder</label><input id="fBidder" value="${esc(t?.bidder||'')}"></div>`}<div class="field"><label>${isDana?'Nominal Dana (OTOMATIS)':'Harga Bidding'}</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPrice" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.price||0).toLocaleString('id-ID')}" ${isDana?'readonly':''} oninput="${isDana?'':'formatPriceInput(this);previewOverpay()'}" style="padding-left:42px;${isDana?'background:#f1f5f9;font-weight:700;':''}"></div>${isDana?'<small style="color:#64748b">Harga otomatis mengikuti Daftar Harga dan tidak bisa diubah manual.</small>':''}</div><div class="field"><label>Jumlah</label><input id="fQty" type="number" min="1" value="${t?.qty||1}" oninput="previewOverpay()"></div>${isDana?`<div class="field"><label>Total Nominal (OTOMATIS)</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fDanaTotal" type="text" readonly value="${Number(t?.total??(Number(t?.price||0)*Number(t?.qty||1))).toLocaleString('id-ID')}" style="padding-left:42px;background:#f1f5f9;font-weight:700"></div><small style="color:#64748b">Total nominal dihitung otomatis dari nominal dana × jumlah.</small></div><div class="field"><label>Uang yang Dibayarkan</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPaidAmount" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.paidAmount??(Number(t?.total||0)+Number(t?.overpay||0))).toLocaleString('id-ID')}" oninput="formatPriceInput(this);previewOverpay()" style="padding-left:42px" placeholder="0"></div><small style="color:#64748b">Masukkan jumlah uang yang diterima. Selisih lebih bayar dihitung otomatis.</small><div id="overpayPreview" style="margin-top:6px;font-weight:700;color:#166534">Lebih bayar: Rp 0</div></div><div class="field full"><label>Pembayaran</label><select id="fPayment"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select></div>`:`<div class="field"><label>Uang yang Dibayarkan</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPaidAmount" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.paidAmount??(Number(t?.total||0)+Number(t?.overpay||0))).toLocaleString('id-ID')}" oninput="formatPriceInput(this);previewOverpay()" style="padding-left:42px" placeholder="0"></div><small style="color:#64748b">Masukkan jumlah uang yang diterima. Selisih lebih bayar dihitung otomatis.</small><div id="overpayPreview" style="margin-top:6px;font-weight:700;color:#166534">Lebih bayar: Rp 0</div></div><div class="field"><label>Pembayaran</label><select id="fPayment"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select></div>`}<div class="field"><label>Tanggal (OTOMATIS)</label><input id="fDate" value="${esc(t?.date||systemDateLocal())}" readonly style="background:#f1f5f9;font-weight:700"><small style="color:#64748b">Tanggal diisi otomatis oleh sistem dan tidak dapat diubah.</small></div></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveTransaction('${id||''}')">Simpan</button></div>`;if(t){document.getElementById('fItem').value=t.itemName;syncItemNumberFromName();document.getElementById('fPayment').value=t.payment||''}syncItemNumberFromName();if(isDana)syncDanaItemPrice();document.getElementById('modal').classList.add('show');previewOverpay()}
-function previewOverpay(){const amount=Number(String(document.getElementById('fPaidAmount')?.value||'').replace(/\D/g,''))||0;const qty=Number(document.getElementById('fQty')?.value||1);const item=document.getElementById('fItem')?.value||'';const price=currentSite==='dana'?Number((state.prices||[]).find(x=>String(x.name||'').trim().toLowerCase()===String(item).trim().toLowerCase())?.price||0):Number(String(document.getElementById('fPrice')?.value||'').replace(/\D/g,''))||0;const total=price*qty;const totalEl=document.getElementById('fDanaTotal');if(totalEl)totalEl.value=total.toLocaleString('id-ID');const diff=Math.max(0,amount-total);const el=document.getElementById('overpayPreview');if(el)el.textContent='Lebih bayar: Rp '+diff.toLocaleString('id-ID')} function syncItemNumberFromName(){const select=document.getElementById('fItem'),number=document.getElementById('fItemNo');if(!select||!number)return;const idx=(state.prices||[]).findIndex(x=>String(x.name||'').trim().toLocaleLowerCase()===String(select.value||'').trim().toLocaleLowerCase());number.value=idx>=0?String(idx+1):''}function syncItemNameFromNumber(){const number=document.getElementById('fItemNo'),select=document.getElementById('fItem');if(!number||!select)return;const n=Number(number.value);if(!Number.isInteger(n)||n<1||n>(state.prices||[]).length){select.value='';return}select.value=String(state.prices[n-1]?.name||'')} function syncDanaItemPrice(){if(currentSite!=='dana')return;const select=document.getElementById('fItem'),priceInput=document.getElementById('fPrice');if(!select||!priceInput)return;const selected=String(select.value||'').trim().toLocaleLowerCase();const item=(state.prices||[]).find(x=>String(x.name||'').trim().toLocaleLowerCase()===selected);const price=Number(item?.price||0);priceInput.value=price?price.toLocaleString('id-ID'):'0';previewOverpay()}
+function transactionForm(id){const t=id?state.transactions.find(x=>x.id===id):null;const opts=state.prices.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');const isDana=currentSite==='dana';const isCashDonor=isDana&&String(t?.bidder||'').trim().toUpperCase()==='CASH';document.getElementById('modalTitle').textContent=t?'Edit Transaksi':'Tambah Transaksi';document.getElementById('modalBody').innerHTML=`<div class="formgrid"><div class="field"><label>${isDana?'ORDER NO':'BID NO'} (OTOMATIS)</label><input id="fBid" value="${esc(t?.bidNo||nextBidNo())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor resmi dikunci oleh cloud saat Simpan agar tidak bentrok dengan pengguna lain.</small></div><div class="field"><label>Nomor Nota (OTOMATIS)</label><input id="fInvoice" value="${esc(t?.invoice||nextInvoice())}" readonly style="background:#f1f5f9;font-weight:700;letter-spacing:1px"><small style="color:#64748b">Nomor nota dibuat otomatis oleh sistem dan tidak dapat diubah.</small></div><div class="field"><label>Nomor Item</label><input id="fItemNo" type="number" min="1" step="1" placeholder="Masukkan nomor" oninput="syncItemNameFromNumber();syncDanaItemPrice();previewOverpay()"><small style="color:#64748b">Gunakan nomor pada kolom No di Daftar Harga & Item.</small></div><div class="field"><label>Nama Barang</label><select id="fItem" onchange="syncItemNumberFromName();syncDanaItemPrice();previewOverpay()"><option value="">Pilih barang</option>${opts}</select></div>${isDana?`<div class="field full"><label>Nama Donatur</label><div style="display:grid;grid-template-columns:minmax(105px,.72fr) minmax(0,1.55fr);gap:10px"><button type="button" id="fDonorCash" class="${isCashDonor?'primary':'soft'}" aria-pressed="${isCashDonor}" onclick="setDonorCash()" style="min-height:42px">CASH</button><input id="fBidder" value="${isCashDonor?'':esc(t?.bidder||'')}" placeholder="Masukkan nama donatur" ${isCashDonor?'readonly':''} onfocus="clearDonorCash()"></div><small style="color:#64748b">Pilih CASH jika pembeli tidak perlu dicatat namanya.</small></div>`:`<div class="field full"><label>Nama Bidder</label><input id="fBidder" value="${esc(t?.bidder||'')}"></div>`}<div class="field"><label>${isDana?'Nominal Dana (OTOMATIS)':'Harga Bidding'}</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPrice" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.price||0).toLocaleString('id-ID')}" ${isDana?'readonly':''} oninput="${isDana?'':'formatPriceInput(this);previewOverpay()'}" style="padding-left:42px;${isDana?'background:#f1f5f9;font-weight:700;':''}"></div>${isDana?'<small style="color:#64748b">Harga otomatis mengikuti Daftar Harga dan tidak bisa diubah manual.</small>':''}</div>${isDana?`<div class="field"><label>Jumlah</label><input id="fQty" type="number" min="1" value="${t?.qty||1}" oninput="previewOverpay()"></div>`:``}${isDana?`<div class="field"><label>Total Nominal (OTOMATIS)</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fDanaTotal" type="text" readonly value="${Number(t?.total??(Number(t?.price||0)*Number(t?.qty||1))).toLocaleString('id-ID')}" style="padding-left:42px;background:#f1f5f9;font-weight:700"></div><small style="color:#64748b">Total nominal dihitung otomatis dari nominal dana × jumlah.</small></div><div class="field"><label>Uang yang Dibayarkan</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPaidAmount" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.paidAmount??(Number(t?.total||0)+Number(t?.overpay||0))).toLocaleString('id-ID')}" oninput="formatPriceInput(this);previewOverpay()" style="padding-left:42px" placeholder="0"></div><small style="color:#64748b">Masukkan jumlah uang yang diterima. Selisih lebih bayar dihitung otomatis.</small><div id="overpayPreview" style="margin-top:6px;font-weight:700;color:#166534">Lebih bayar: Rp 0</div></div><div class="field full"><label>Pembayaran</label><select id="fPayment" onchange="previewOverpay()"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select><small id="paymentRuleHint" style="display:block;color:#64748b;margin-top:5px">Pilih metode pembayaran jika nominal yang diterima sudah mencukupi total transaksi.</small></div>`:`<div class="field"><label>Uang yang Dibayarkan</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:#334155;pointer-events:none">Rp</span><input id="fPaidAmount" type="text" inputmode="numeric" autocomplete="off" value="${Number(t?.paidAmount??(Number(t?.total||0)+Number(t?.overpay||0))).toLocaleString('id-ID')}" oninput="formatPriceInput(this);previewOverpay()" style="padding-left:42px" placeholder="0"></div><small style="color:#64748b">Masukkan jumlah uang yang diterima. Selisih lebih bayar dihitung otomatis.</small><div id="overpayPreview" style="margin-top:6px;font-weight:700;color:#166534">Lebih bayar: Rp 0</div></div><div class="field"><label>Pembayaran</label><select id="fPayment" onchange="previewOverpay()"><option value="">Belum Bayar</option><option>CASH</option><option>TRANSFER</option><option>QRIS</option></select><small id="paymentRuleHint" style="display:block;color:#64748b;margin-top:5px">Pilih metode pembayaran jika nominal yang diterima sudah mencukupi total transaksi.</small></div>`}<div class="field"><label>Tanggal (OTOMATIS)</label><input id="fDate" value="${esc(t?.date||systemDateLocal())}" readonly style="background:#f1f5f9;font-weight:700"><small style="color:#64748b">Tanggal diisi otomatis oleh sistem dan tidak dapat diubah.</small></div></div><div class="toolbar" style="justify-content:flex-end;margin-top:18px"><button class="soft" onclick="closeModal()">Batal</button><button class="primary" onclick="saveTransaction('${id||''}')">Simpan</button></div>`;if(t){document.getElementById('fItem').value=t.itemName;syncItemNumberFromName();document.getElementById('fPayment').value=t.payment||''}syncItemNumberFromName();if(isDana)syncDanaItemPrice();document.getElementById('modal').classList.add('show');previewOverpay()}
+function previewOverpay(){
+ const amount=Number(String(document.getElementById('fPaidAmount')?.value||'').replace(/\D/g,''))||0;
+ const qty=Number(document.getElementById('fQty')?.value||1);
+ const item=document.getElementById('fItem')?.value||'';
+ const price=currentSite==='dana'?Number((state.prices||[]).find(x=>String(x.name||'').trim().toLowerCase()===String(item).trim().toLowerCase())?.price||0):Number(String(document.getElementById('fPrice')?.value||'').replace(/\D/g,''))||0;
+ const total=price*qty;
+ const totalEl=document.getElementById('fDanaTotal');if(totalEl)totalEl.value=total.toLocaleString('id-ID');
+ const diff=Math.max(0,amount-total);
+ const el=document.getElementById('overpayPreview');if(el)el.textContent='Lebih bayar: Rp '+diff.toLocaleString('id-ID');
+ const payment=document.getElementById('fPayment');
+ if(payment){
+  const paidOptions=[...payment.options].filter(o=>o.value);
+  paidOptions.forEach(o=>o.disabled=amount<total||amount<=0);
+  if(amount<total&&payment.value){payment.value='';}
+ }
+ const hint=document.getElementById('paymentRuleHint');
+ if(hint){
+  if(amount<=0){hint.textContent='Belum Bayar. Isi nominal minimal Rp '+total.toLocaleString('id-ID')+' untuk memilih CASH, TRANSFER, atau QRIS.';hint.style.color='#64748b';}
+  else if(amount<total){hint.textContent='Nominal pembayaran kurang. Minimal Rp '+total.toLocaleString('id-ID')+'.';hint.style.color='#b91c1c';}
+  else{hint.textContent='Nominal mencukupi. Silakan pilih CASH, TRANSFER, atau QRIS.';hint.style.color='#166534';}
+ }
+} function syncItemNumberFromName(){const select=document.getElementById('fItem'),number=document.getElementById('fItemNo');if(!select||!number)return;const idx=(state.prices||[]).findIndex(x=>String(x.name||'').trim().toLocaleLowerCase()===String(select.value||'').trim().toLocaleLowerCase());number.value=idx>=0?String(idx+1):''}function syncItemNameFromNumber(){const number=document.getElementById('fItemNo'),select=document.getElementById('fItem');if(!number||!select)return;const n=Number(number.value);if(!Number.isInteger(n)||n<1||n>(state.prices||[]).length){select.value='';return}select.value=String(state.prices[n-1]?.name||'')} function syncDanaItemPrice(){if(currentSite!=='dana')return;const select=document.getElementById('fItem'),priceInput=document.getElementById('fPrice');if(!select||!priceInput)return;const selected=String(select.value||'').trim().toLocaleLowerCase();const item=(state.prices||[]).find(x=>String(x.name||'').trim().toLocaleLowerCase()===selected);const price=Number(item?.price||0);priceInput.value=price?price.toLocaleString('id-ID'):'0';previewOverpay()}
 function clearDonorCash(){const btn=document.getElementById('fDonorCash'),input=document.getElementById('fBidder');if(!btn||!input)return;if(btn.getAttribute('aria-pressed')==='true'){btn.setAttribute('aria-pressed','false');btn.className='soft';input.readOnly=false;input.value=''}} function setDonorCash(){const btn=document.getElementById('fDonorCash'),input=document.getElementById('fBidder');if(!btn||!input)return;const active=btn.getAttribute('aria-pressed')!=='true';btn.setAttribute('aria-pressed',String(active));btn.className=active?'primary':'soft';input.readOnly=active;if(active)input.value='';else input.focus()}
 function systemDateLocal(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')} function nextInvoice(){const base=currentSite==='dana'?26000:2600;const nums=state.transactions.map(t=>Number(String(t.invoice||'').replace(/[^0-9]/g,''))).filter(n=>Number.isFinite(n)&&n>=base);return String(Math.max(base,...nums)+1)}
 function nextBidNo(){const nums=state.transactions.map(t=>parseInt(String(t.bidNo||'').replace(/\D/g,''),10)).filter(Number.isFinite);return String((nums.length?Math.max(...nums):0)+1).padStart(2,'0')}
@@ -1257,12 +1345,25 @@ async function saveTransaction(id){
  const item=document.getElementById('fItem').value;const itemNo=Number(document.getElementById('fItemNo')?.value||0);const catalogItem=Number.isInteger(itemNo)&&itemNo>=1?(state.prices||[])[itemNo-1]:null;if(!catalogItem||String(catalogItem.name||'').trim().toLocaleLowerCase()!==String(item||'').trim().toLocaleLowerCase()){alert('Pilih atau masukkan Nomor Item yang sesuai dengan Nama Barang.');return}
  const selectedPriceItem=currentSite==='dana'?(state.prices||[]).find(x=>String(x.name||'').trim().toLocaleLowerCase()===String(item||'').trim().toLocaleLowerCase()):null;
  const price=currentSite==='dana'?Number(selectedPriceItem?.price||0):(Number(String(document.getElementById('fPrice').value||'').replace(/\D/g,''))||0);
- const qty=+document.getElementById('fQty').value;
+ const qty=currentSite==='dana'?(+document.getElementById('fQty').value):1;
  const cashDonor=currentSite==='dana'&&document.getElementById('fDonorCash')?.getAttribute('aria-pressed')==='true';
  const bidder=cashDonor?'CASH':document.getElementById('fBidder').value.trim().toLocaleUpperCase('id-ID');
  const paidAmount=(Number(String(document.getElementById('fPaidAmount')?.value||'').replace(/\D/g,''))||0); const overpay=Math.max(0,paidAmount-(price*qty));
- if(!item||(!bidder&&qty>=1)||qty<1){alert('Lengkapi barang, nama donatur/bidder, dan jumlah. Pilih CASH jika nama donatur tidak ingin diisi.');return}
+ const payment=String(document.getElementById('fPayment').value||'').toLocaleUpperCase('id-ID');
+ const transactionTotal=price*qty;
+ if(paidAmount>0&&paidAmount<transactionTotal){alert('Nominal pembayaran tidak boleh lebih kecil dari total harga barang. Minimal Rp '+transactionTotal.toLocaleString('id-ID')+'.');return}
+ if(paidAmount===0&&payment){alert('Pilih Belum Bayar jika belum ada pembayaran. CASH, TRANSFER, dan QRIS hanya dapat dipilih setelah nominal pembayaran mencukupi.');return}
+ if(paidAmount>=transactionTotal&&transactionTotal>0&&!payment){alert('Pilih metode pembayaran: CASH, TRANSFER, atau QRIS.');return}
+ // Donatur anonim (tombol CASH) tidak boleh dicatat sebagai transaksi Belum Bayar.
+ // Untuk transaksi Belum Bayar, nama donatur wajib diisi.
+ if(currentSite==='dana'&&cashDonor&&!payment){alert('Donatur CASH tidak dapat memilih Belum Bayar. Pilih metode pembayaran atau isi nama donatur jika belum membayar.');return}
+ if(currentSite==='dana'&&!payment&&!cashDonor&&!bidder){alert('Transaksi Belum Bayar wajib diisi nama donatur.');return}
+
+ if(!item||!bidder||qty<1){alert(currentSite==='dana'?'Lengkapi barang, nama donatur, dan jumlah. Pilih CASH jika nama donatur tidak ingin diisi.':'Lengkapi barang dan nama bidder.');return}
  const previous=id?state.transactions.find(x=>x.id===id):null;
+ const currentProgress=(state.items||[]).find(x=>String(x.name||'').trim().toLocaleLowerCase('id-ID')===String(item||'').trim().toLocaleLowerCase('id-ID'));
+ const availableForThisSave=Number(currentProgress?.remain??catalogItem.stock??0)+(previous&&String(previous.itemName||'').trim().toLocaleLowerCase('id-ID')===String(item||'').trim().toLocaleLowerCase('id-ID')?Number(previous.qty||0):0);
+ // Penjualan tetap diizinkan walaupun melebihi stok; sisa stok dapat tampil negatif.
  const saveBtn=document.querySelector('#modalBody button.primary');
  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Memproses nomor…';}
  try{
@@ -1272,9 +1373,10 @@ async function saveTransaction(id){
    const allocated=await vdsApi('allocate-transaction-numbers',{site:currentSite});
    official={bidNo:allocated.bidNo,invoice:allocated.invoice};
   }
-  const obj={id:id||crypto.randomUUID(),invoice:id?previous.invoice:official.invoice,bidNo:id?(document.getElementById('fBid').value||previous.bidNo):official.bidNo,itemName:String(item).toLocaleUpperCase('id-ID'),bidder,price,qty,total:price*qty,paidAmount,overpay,payment:String(document.getElementById('fPayment').value||'').toLocaleUpperCase('id-ID'),date:previous?.date||(id?document.getElementById('fDate').value:systemDateLocal()),staff:currentUser,cashier:'',createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+  const obj={id:id||crypto.randomUUID(),invoice:id?previous.invoice:official.invoice,bidNo:id?(document.getElementById('fBid').value||previous.bidNo):official.bidNo,itemName:String(item).toLocaleUpperCase('id-ID'),bidder,price,qty,total:price*qty,paidAmount,overpay,payment,date:previous?.date||(id?document.getElementById('fDate').value:systemDateLocal()),staff:currentUser,cashier:'',createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
   if(id){const i=state.transactions.findIndex(t=>t.id===id);if(i<0)throw new Error('Transaksi yang diedit tidak ditemukan.');state.transactions[i]=obj}
   else state.transactions.push(obj);
+  recalculateCatalogProgressFromTransactions();
   state.history=state.history||[];
   const syncHistory={id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,overpay:obj.overpay,payment:obj.payment,staff:obj.staff};
   state.history.push(syncHistory);
