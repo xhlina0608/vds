@@ -1,0 +1,16 @@
+UPDATE VDS — HAPUS AKSI BAYAR LANGSUNG
+Tanggal: 19 November 2026
+
+PERUBAHAN
+- Tombol BAYAR dan Ganti Bayar di tabel transaksi dihapus.
+- Modal Pilih Metode Pembayaran yang sebelumnya dibuka dari tombol tersebut dihapus.
+- Tombol Edit dan Nota tetap tersedia.
+- Pembayaran hanya dapat diubah melalui Edit Transaksi: masukkan Uang yang Dibayarkan, pilih metode pembayaran (Belum Bayar/CASH/TRANSFER/QRIS), lalu Simpan.
+- Berlaku untuk workspace Bidding dan Dana Paramita karena keduanya menggunakan transactionTable yang sama.
+
+FILE UNTUK VERCEL/GITHUB
+- Gunakan index.html di ROOT ZIP/repository ini.
+- Vercel Root Directory tetap repository root.
+- Jangan gunakan website-root/index.html atau file di 3-BACKUP sebagai file deployment; folder tersebut adalah arsip/versi pembanding.
+
+FILE LAIN TIDAK DIUBAH. Database, Supabase Edge Function, Live Sync, format nota, rekap pembayaran, dan data transaksi tidak dimodifikasi oleh update ini.
