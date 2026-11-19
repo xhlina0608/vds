@@ -90,7 +90,21 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 .permission-heading{font-weight:800;margin-top:16px;color:#142b40}
 @media(max-width:700px){.permission-grid{grid-template-columns:1fr}}
 @media(max-width:600px){#sitePortal .loginbox>div[style*=grid-template-columns]{grid-template-columns:1fr!important}}
-</style><style id="vds-hide-yellow-notices">.note{display:none!important}</style></head><body>
+</style><style id="vds-hide-yellow-notices">.note{display:none!important}</style><style id="vds-transaction-independent-scroll">
+/* Keep the VDS application viewport fixed; scroll only the transaction list. */
+#app.layout:has(.transaction-panel){height:100vh;height:100dvh;min-height:0;overflow:hidden;}
+#app.layout:has(.transaction-panel)>main{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+#app.layout:has(.transaction-panel)>main>#content{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+#app #content>.transaction-panel{flex:1 1 auto;min-height:0;height:100%;display:flex;flex-direction:column;margin-bottom:0;overflow:hidden;}
+#app .transaction-panel>.panelhead{flex:0 0 auto;}
+#app .transaction-panel>.transaction-tablewrap{flex:1 1 auto;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;}
+#app .transaction-tablewrap thead th{position:sticky;top:0;z-index:2;}
+@media(max-width:900px){
+  #app.layout:has(.transaction-panel){grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);}
+  #app.layout:has(.transaction-panel)>main{height:auto;min-height:0;}
+  #app.layout:has(.transaction-panel)>main>#content{min-height:0;}
+}
+</style></head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
 <div id="loginError" style="display:none;color:#b91c1c;font-size:13px;margin-top:10px"></div><button class="primary" style="width:100%;margin-top:18px" onclick="login()">MASUK</button><div class="note" style="margin-top:14px">Gunakan username dan password yang diberikan Admin.</div></div></div>
@@ -645,8 +659,8 @@ async function saveSharedInventoryAdmin(next){
 
 function transactionSortValue(value){const digits=String(value??'').replace(/[^0-9]/g,'');return digits?Number(digits):Number.MAX_SAFE_INTEGER;}
 function sortedTransactionsByOrder(rows=state.transactions){return [...(rows||[])].sort((a,b)=>{const ai=transactionSortValue(a.invoice),bi=transactionSortValue(b.invoice);if(ai!==bi)return bi-ai;const an=transactionSortValue(a.bidNo),bn=transactionSortValue(b.bidNo);if(an!==bn)return bn-an;return String(b.createdAt||'').localeCompare(String(a.createdAt||''));});}
-function transactionTable(rows){if(!rows.length)return '<div class="empty">Belum ada transaksi. Klik Tambah Transaksi untuk mulai.</div>';return `<div class="tablewrap"><table><thead><tr><th>No. Nota</th><th>${currentSite==='dana'?'ORDER NO':'BID NO'}</th><th>Nama Barang</th><th>Bidder</th><th>Nominal</th><th>Qty</th><th>Total</th><th>Petugas</th><th>Pembayaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(t=>`<tr><td>${t.invoice}</td><td>${esc(t.bidNo)}</td><td>${esc(t.itemName)}</td><td>${esc(t.bidder)}</td><td>${money(t.price)}</td><td>${t.qty}</td><td><b>${money(t.total)}</b></td><td>${esc(t.staff||'-')}</td><td><span class="pill ${t.payment?'paid':'unpaid'}">${t.payment||'BELUM BAYAR'}</span></td><td><button class="soft" onclick="editTransaction('${t.id}')">Edit</button> <button class="soft" onclick="openInvoice('${t.id}')">Nota</button></td></tr>`).join('')}</tbody></table></div>`}
-function transactionsPage(){return `<div class="panel"><div class="panelhead"><h3>${currentSite==='dana'?'Live Laporan Dana':'Live Bidding'}</h3><button class="primary" onclick="transactionForm()">+ Tambah Transaksi</button></div>${transactionTable(sortedTransactionsByOrder())}</div>`}
+function transactionTable(rows){if(!rows.length)return '<div class="empty">Belum ada transaksi. Klik Tambah Transaksi untuk mulai.</div>';return `<div class="tablewrap transaction-tablewrap"><table><thead><tr><th>No. Nota</th><th>${currentSite==='dana'?'ORDER NO':'BID NO'}</th><th>Nama Barang</th><th>Bidder</th><th>Nominal</th><th>Qty</th><th>Total</th><th>Petugas</th><th>Pembayaran</th><th>Aksi</th></tr></thead><tbody>${rows.map(t=>`<tr><td>${t.invoice}</td><td>${esc(t.bidNo)}</td><td>${esc(t.itemName)}</td><td>${esc(t.bidder)}</td><td>${money(t.price)}</td><td>${t.qty}</td><td><b>${money(t.total)}</b></td><td>${esc(t.staff||'-')}</td><td><span class="pill ${t.payment?'paid':'unpaid'}">${t.payment||'BELUM BAYAR'}</span></td><td><button class="soft" onclick="editTransaction('${t.id}')">Edit</button> <button class="soft" onclick="openInvoice('${t.id}')">Nota</button></td></tr>`).join('')}</tbody></table></div>`}
+function transactionsPage(){return `<div class="panel transaction-panel"><div class="panelhead"><h3>${currentSite==='dana'?'Live Laporan Dana':'Live Bidding'}</h3><button class="primary" onclick="transactionForm()">+ Tambah Transaksi</button></div>${transactionTable(sortedTransactionsByOrder())}</div>`}
 
 
 function saveInvoiceEdits(){if(!isAdmin()){alert('Hanya Admin yang dapat mengedit atau menyimpan perubahan nota.');return}if(!requirePermission('invoice'))return;if(!selectedInvoice){alert('Pilih transaksi terlebih dahulu.');return}const t=state.transactions.find(x=>x.id===selectedInvoice);if(!t)return;persist();saveInvoiceLayout();try{localStorage.setItem(siteBgKey(),invoiceBackground)}catch(e){}t.invoiceSavedAt=new Date().toISOString();t.invoiceSavedBy=currentUser;t.updatedAt=new Date().toISOString();persist();state.history=state.history||[];const h={id:crypto.randomUUID(),action:'SAVE INVOICE',timestamp:new Date().toISOString(),user:currentUser,invoice:t.invoice,bidNo:t.bidNo,itemName:t.itemName,bidder:t.bidder,price:t.price,qty:t.qty,total:t.total,payment:t.payment||'',note:'Nota disimpan melalui sinkronisasi cloud VDS'};state.history.push(h);persist();vdsPublishTransactionUpdate(t,h);const note=document.querySelector('.printpanel .note');if(note)note.textContent='Perubahan nota disimpan; data utama tersinkron ke cloud.';alert('Perubahan nota berhasil disimpan.');}
