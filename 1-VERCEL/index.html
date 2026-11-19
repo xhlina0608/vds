@@ -297,9 +297,16 @@ const permissionCatalog=[
  {key:'exportExcel',label:'Export Excel'},
  {key:'exportPDF',label:'Export PDF'}
 ];
+function normalizePermissions(input){
+ const source=input&&typeof input==='object'&&!Array.isArray(input)?input:{};
+ const normalized={};
+ Object.keys(source).forEach(key=>{normalized[key]=source[key]===true||source[key]==='true'||source[key]===1;});
+ return normalized;
+}
 function hasPermission(key){
  if(isAdmin())return true;
- const permissions=currentProfile?.permissions||{};
+ const permissions=normalizePermissions(currentProfile?.permissions);
+ if(key==='siteSponsor')return permissions.siteSponsor===true;
  if(key!=='siteBidding'&&key!=='siteDana'){const siteKey=currentSite==='dana'?'siteDana':'siteBidding';if(permissions[siteKey]===true)return true;}
  return permissions[key]===true;
 }
@@ -1461,7 +1468,7 @@ async function login(){
  try{
   const out=await vdsApi('login',{username:n,password:p},'');
   vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
-  currentProfile=out.user;currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
+  currentProfile=out.user;currentProfile.permissions=normalizePermissions(out.user.permissions);currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
   // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
   // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
   accounts=[];window.__vdsUsersLoaded=false;window.__vdsUsersLoading=false;
@@ -1485,7 +1492,7 @@ async function login(){
 }
 async function vdsLoadUsers(){
  const out=await vdsApi('list-users');
- accounts=(out.users||[]).map(u=>({...u,createdAt:u.created_at,password:undefined}));
+ accounts=(out.users||[]).map(u=>({...u,permissions:normalizePermissions(u.permissions),createdAt:u.created_at,password:undefined}));
  window.__vdsUsersLoaded=true;
  return accounts;
 }
@@ -1714,9 +1721,20 @@ async function deleteAccount(i){
 }
 async function saveAccountPermissions(i){
  if(!isAdmin()||!accounts[i]||accounts[i].role==='admin')return;
- const permissions=readPermissionChecks();
- try{await vdsApi('update-user',{id:accounts[i].id,permissions});accounts[i].permissions=permissions;closeModal();render();alert('Izin fitur berhasil disimpan.');}
- catch(e){alert('Gagal menyimpan izin: '+e.message);}
+ const target=accounts[i];
+ const permissions=normalizePermissions(readPermissionChecks());
+ try{
+  await vdsApi('update-user',{id:target.id,permissions});
+  // Baca ulang dari Supabase agar angka fitur mencerminkan data yang benar-benar tersimpan.
+  await vdsLoadUsers();
+  const refreshed=accounts.find(a=>String(a.id)===String(target.id));
+  if(!refreshed)throw new Error('Izin tersimpan, tetapi akun tidak ditemukan saat membaca ulang data.');
+  const savedCount=permissionCatalog.filter(p=>refreshed.permissions&&refreshed.permissions[p.key]===true).length;
+  const selectedCount=permissionCatalog.filter(p=>permissions[p.key]===true).length;
+  closeModal();render();
+  if(savedCount!==selectedCount){alert('Perubahan dikirim, tetapi data yang dibaca kembali dari Supabase belum sesuai ('+savedCount+'/'+permissionCatalog.length+' fitur). Periksa deployment Edge Function vds-api.');}
+  else{alert('Izin fitur berhasil disimpan dan diverifikasi dari Supabase: '+savedCount+'/'+permissionCatalog.length+' fitur.');}
+ }catch(e){alert('Gagal menyimpan atau memverifikasi izin: '+e.message);}
 }
 async function createAccount(){
  if(!isAdmin())return;
