@@ -186,7 +186,7 @@ function vdsStartSyncPolling(site){
  if(vdsSyncPollTimer&&vdsSyncPollSite===site)return;
  vdsStopSyncPolling();
  vdsSyncPollSite=site;
- // Fallback hanya saat Realtime tidak tersedia. Realtime normal tidak melakukan polling berkala.
+ // Pemeriksaan cadangan berkala; tetap aktif untuk menutup celah event yang terlewat Realtime.
  vdsPollSyncEvents(site).catch(()=>{});
  vdsSyncPollTimer=setInterval(()=>{if(vdsSyncPollSite===site)vdsPollSyncEvents(site).catch(()=>{});},30000);
 }
@@ -202,8 +202,10 @@ async function vdsStartRealtime(site){
   vdsRealtimeChannel=vdsRealtimeClient.channel('vds-sync-'+site).on('postgres_changes',{event:'INSERT',schema:'public',table:'vds_sync_events',filter:'site=eq.'+site},(msg)=>{if(generation===vdsRealtimeGeneration&&currentSite===site)vdsMergeRealtimeEvent(msg.new);}).subscribe((status)=>{
    if(generation!==vdsRealtimeGeneration)return;
    if(status==='SUBSCRIBED'){
-    vdsStopSyncPolling();
-    if(firstSubscribed){firstSubscribed=false;vdsSyncNote('Realtime terhubung · sinkronisasi aktif',2200);}
+    // Keep a low-frequency event check as a safety net. SUBSCRIBED only
+    // confirms the websocket channel, not that every database event arrives.
+    vdsStartSyncPolling(site);
+    if(firstSubscribed){firstSubscribed=false;vdsSyncNote('Realtime terhubung · pemeriksaan cadangan aktif',2600);}
     else{vdsPollSyncEvents(site).catch(e=>console.warn('Live sync reconnect:',e));}
    }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
     vdsSyncNote('Realtime terputus · sinkronisasi cadangan aktif',3500);

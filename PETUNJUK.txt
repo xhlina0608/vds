@@ -1,17 +1,18 @@
-UPDATE VDS – RINCIAN LEBIH BAYAR & NOMOR TRANSAKSI
+VDS - PERBAIKAN LIVE SYNC
 
-1. Ganti file 1-VERCEL/index.html pada repository GitHub dengan file dari folder 1-VERCEL di ZIP ini.
-2. Commit ke branch main dan tunggu deployment Vercel selesai.
-3. Update tampilan ini menghilangkan tiga kartu ringkasan LEBIH BAYAR CASH / TRANSFER / QRIS dari halaman Live Bidding dan Live Laporan Dana.
-   Nilai lebih bayar transaksi tetap dihitung dan disimpan; hanya kartu ringkasannya yang disembunyikan. Rincian Dana tetap menjadi tempat melihat detailnya.
-4. Untuk memulai ulang nomor setelah data testing dikosongkan, buka Supabase > SQL Editor, lalu jalankan RESET-NOMOR-SETELAH-TESTING.sql SATU KALI.
-   Pastikan transaksi testing memang sudah kosong sebelum menjalankan SQL tersebut.
-5. Setelah reset:
-   - Bidding: BID NO berikutnya 01 dan Nota 2601.
-   - Dana Paramita: ORDER NO berikutnya 01 dan Nota 26001.
-6. Refresh website dengan Ctrl+F5 setelah deployment.
+Perubahan:
+- Realtime websocket tetap menjadi jalur utama untuk update langsung.
+- Pemeriksaan cadangan get-sync-events tetap berjalan setiap 30 detik walaupun status channel sudah SUBSCRIBED.
+- Ini menangani kondisi channel terlihat tersambung tetapi event database tidak diterima oleh browser.
+- Polling hanya mengambil event baru (after_id), bukan mengunduh seluruh app_state.
 
-PENTING:
-- File HTML tidak mereset counter database secara otomatis.
-- SQL reset hanya untuk dipakai setelah clear testing; jangan jalankan ketika transaksi asli sudah mulai dicatat.
-- Tidak ada perubahan pada Supabase Edge Function atau logika Live Sync.
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti file 1-VERCEL/index.html di project GitHub dengan file dari folder ini.
+3. Commit/push ke branch yang dipakai Vercel.
+4. Tunggu deployment selesai, lalu buka ulang VDS di kedua komputer.
+5. Uji: input satu transaksi di Admin. User harus melihatnya langsung via Realtime atau paling lambat sekitar 30 detik melalui pemeriksaan cadangan.
+
+Catatan:
+- ZIP ini hanya mengubah frontend. Tidak menjalankan SQL migration dan tidak mengubah Edge Function.
+- Pemeriksaan cadangan menambah sekitar 2 panggilan API per menit per komputer yang sedang membuka website. Realtime tetap menjadi jalur utama.
