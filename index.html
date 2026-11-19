@@ -130,6 +130,32 @@ function vdsStopRealtime(){
  vdsRealtimeChannel=null;vdsRealtimeSite='';
  vdsStopSyncPolling();vdsSyncPollBusy=false;
 }
+function recalculateCatalogProgressFromTransactions(){
+ if(!Array.isArray(state.prices))state.prices=[];
+ if(!Array.isArray(state.items))state.items=[];
+ const totals=new Map();
+ for(const tx of (state.transactions||[])){
+  const key=String(tx.itemName||'').trim().toLocaleLowerCase('id-ID');
+  if(!key)continue;
+  const current=totals.get(key)||{bid:0,sum:0};
+  current.bid+=Math.max(0,Number(tx.qty||0));
+  current.sum+=Number(tx.total??(Number(tx.price||0)*Number(tx.qty||0)));
+  totals.set(key,current);
+ }
+ for(const product of state.prices){
+  const key=String(product.name||'').trim().toLocaleLowerCase('id-ID');
+  if(!key)continue;
+  const total=totals.get(key)||{bid:0,sum:0};
+  const stock=Math.max(0,Number(product.stock||0));
+  let progress=state.items.find(x=>String(x.name||'').trim().toLocaleLowerCase('id-ID')===key);
+  if(!progress){progress={no:product.no||state.items.length+1,name:product.name,stock,bid:0,remain:stock,sum:0,return:null};state.items.push(progress);}
+  progress.name=product.name;
+  progress.stock=stock;
+  progress.bid=total.bid;
+  progress.remain=Math.max(0,stock-total.bid);
+  progress.sum=total.sum;
+ }
+}
 function vdsMergeRealtimeEvent(row){
  const payload=row&&row.event_payload;if(!payload||!state||row.site!==currentSite)return;
  if(row.id!==undefined&&row.id!==null){const eventId=String(row.id);if(vdsSeenSyncEventIds.has(eventId))return;vdsSeenSyncEventIds.add(eventId);if(vdsSeenSyncEventIds.size>2000){const keep=[...vdsSeenSyncEventIds].slice(-1000);vdsSeenSyncEventIds.clear();keep.forEach(x=>vdsSeenSyncEventIds.add(x));}}
@@ -141,9 +167,10 @@ function vdsMergeRealtimeEvent(row){
  state.transactions=Array.isArray(state.transactions)?state.transactions:[];
  const i=state.transactions.findIndex(x=>String(x.id)===String(tx.id));
  if(i<0)state.transactions.push(tx);else if(String(state.transactions[i].updatedAt||'')<String(tx.updatedAt||''))state.transactions[i]=tx;
+ recalculateCatalogProgressFromTransactions();
  if(hist&&hist.id){state.history=Array.isArray(state.history)?state.history:[];if(!state.history.some(x=>String(x.id)===String(hist.id)))state.history.push(hist);}
  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}
- if(currentPage==='transactions'||currentPage==='invoice'||currentPage==='dashboard'||currentPage==='history')render();
+ if(currentPage==='transactions'||currentPage==='invoice'||currentPage==='dashboard'||currentPage==='history'||currentPage==='prices'||currentPage==='items')render();
 }
 async function vdsPollSyncEvents(site){
  if(!vdsAccessToken||!site||site!==currentSite||document.visibilityState==='hidden'||vdsSyncPollBusy)return;
@@ -191,7 +218,7 @@ async function vdsCatchupTransactions(site){
  const out=await vdsApi('get-state',{site});if(!out.state)return;
  const incoming=out.state;const byId=new Map((state.transactions||[]).map(x=>[String(x.id),x]));
  for(const tx of (incoming.transactions||[])){const old=byId.get(String(tx.id));if(!old||String(old.updatedAt||'')<String(tx.updatedAt||''))byId.set(String(tx.id),tx);}
- state.transactions=[...byId.values()];const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
+ state.transactions=[...byId.values()];recalculateCatalogProgressFromTransactions();const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}render();
 }
 async function vdsApi(action, data={}, token=vdsAccessToken){
@@ -300,6 +327,7 @@ async function vdsPublishTransactionUpdate(transaction, historyEntry){
 }
 function dashboard(){return `<div class="cards"><div class="card"><small>Total Dana Bidding</small><strong>${money(total())}</strong></div><div class="card"><small>Total Transaksi</small><strong>${state.transactions.length}</strong></div><div class="card"><small>Total Cash</small><strong>${money(paid('CASH'))}</strong></div><div class="card"><small>Belum Dibayar</small><strong>${money(unpaid())}</strong></div></div><div class="panel"><div class="panelhead"><h3>Aktivitas Transaksi Terbaru</h3><button class="primary" onclick="go('transactions')">Buka Live Laporan Dana</button></div>${transactionTable(state.transactions.slice(-8).reverse())}</div><div class="note">Prototype tahap awal. Data contoh master diambil dari workbook. Transaksi baru yang dimasukkan di sini tersimpan pada browser/perangkat ini saja sampai database online diaktifkan.</div>`}
 function catalogPage(){
+ recalculateCatalogProgressFromTransactions();
  const allowed=isAdmin()||hasPermission('prices')||hasPermission('items');
  const rows=state.prices||[];
  return `<div class="panel"><div class="panelhead"><div><h3>Daftar Harga & Item</h3><small>Kelola nama barang, stok, harga, dan ringkasan bidding dalam satu tempat.</small></div><div class="toolbar"><input placeholder="Cari nama barang..." oninput="filterTable(this)"><button class="soft" onclick="exportCatalogPDF()" ${(isAdmin()||hasPermission('prices')||hasPermission('items'))?'':'style="display:none"'}>Download PDF Daftar Harga</button>${isAdmin()?`<button class="primary" onclick="addRow('catalog')">+ Tambah Barang</button>`:''}</div></div><div class="tablewrap"><table><thead><tr><th>No</th><th>Nama Barang</th><th>Stok</th><th>Harga</th><th>Total Bidding</th><th>Sisa Stok</th><th>Total Nilai</th><th>Aksi</th></tr></thead><tbody id="dataRows">${rows.map((r,i)=>{const it=(state.items||[]).find(x=>String(x.name).toLowerCase()===String(r.name).toLowerCase())||{};return `<tr><td>${i+1}</td><td><b>${esc(r.name||'')}</b></td><td>${Number(r.stock||0)}</td><td>${money(r.price||0)}</td><td>${Number(it.bid||0)}</td><td>${Number(it.remain??r.stock??0)}</td><td>${money(it.sum||0)}</td><td>${isAdmin()?`<button class="soft" onclick="editRow('catalog',${i})">Edit</button> <button class="danger" onclick="deleteCatalogItem(${i})">Hapus</button>`:'-'}</td></tr>`}).join('')}</tbody></table></div></div>`;
@@ -1272,6 +1300,9 @@ async function saveTransaction(id){
  const paidAmount=(Number(String(document.getElementById('fPaidAmount')?.value||'').replace(/\D/g,''))||0); const overpay=Math.max(0,paidAmount-(price*qty));
  if(!item||(!bidder&&qty>=1)||qty<1){alert('Lengkapi barang, nama donatur/bidder, dan jumlah. Pilih CASH jika nama donatur tidak ingin diisi.');return}
  const previous=id?state.transactions.find(x=>x.id===id):null;
+ const currentProgress=(state.items||[]).find(x=>String(x.name||'').trim().toLocaleLowerCase('id-ID')===String(item||'').trim().toLocaleLowerCase('id-ID'));
+ const availableForThisSave=Number(currentProgress?.remain??catalogItem.stock??0)+(previous&&String(previous.itemName||'').trim().toLocaleLowerCase('id-ID')===String(item||'').trim().toLocaleLowerCase('id-ID')?Number(previous.qty||0):0);
+ if(qty>availableForThisSave){alert('Stok tidak mencukupi. Sisa stok barang ini: '+availableForThisSave+'.');return}
  const saveBtn=document.querySelector('#modalBody button.primary');
  if(saveBtn){saveBtn.disabled=true;saveBtn.textContent='Memproses nomor…';}
  try{
@@ -1284,6 +1315,7 @@ async function saveTransaction(id){
   const obj={id:id||crypto.randomUUID(),invoice:id?previous.invoice:official.invoice,bidNo:id?(document.getElementById('fBid').value||previous.bidNo):official.bidNo,itemName:String(item).toLocaleUpperCase('id-ID'),bidder,price,qty,total:price*qty,paidAmount,overpay,payment:String(document.getElementById('fPayment').value||'').toLocaleUpperCase('id-ID'),date:previous?.date||(id?document.getElementById('fDate').value:systemDateLocal()),staff:currentUser,cashier:'',createdAt:previous?.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
   if(id){const i=state.transactions.findIndex(t=>t.id===id);if(i<0)throw new Error('Transaksi yang diedit tidak ditemukan.');state.transactions[i]=obj}
   else state.transactions.push(obj);
+  recalculateCatalogProgressFromTransactions();
   state.history=state.history||[];
   const syncHistory={id:crypto.randomUUID(),action:id?'EDIT':'INPUT',timestamp:new Date().toISOString(),user:currentUser,invoice:obj.invoice,bidNo:obj.bidNo,itemName:obj.itemName,bidder:obj.bidder,price:obj.price,qty:obj.qty,total:obj.total,overpay:obj.overpay,payment:obj.payment,staff:obj.staff};
   state.history.push(syncHistory);
