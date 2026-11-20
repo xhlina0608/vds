@@ -942,7 +942,7 @@ html,body{height:100%;overflow:hidden!important}
 // VDS CLOUD CONFIG — public publishable key only. Never place service_role here.
 const VDS_API_URL='https://gmpedvbzmgrpwsgsyszj.supabase.co/functions/v1/vds-api';
 const VDS_PUBLISHABLE_KEY='sb_publishable_KGUwbiUBXU69OPMWn2Irgw_RnEc9Lqp';
-let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getItem('vds_access_token')||'';
+let vdsAccessToken=localStorage.getItem('vds_access_token')||sessionStorage.getItem('vds_access_token')||''; let vdsRefreshToken=localStorage.getItem('vds_refresh_token')||''; let vdsTokenExpiresAt=Number(localStorage.getItem('vds_token_expires_at')||0); let vdsRefreshPromise=null;
 let vdsSaveTimer=null, vdsSaving=false, vdsSaveAgain=false, vdsCloudLoaded={bidding:false,dana:false};
 // Low-egress live sync: receive only compact transaction events, not full app_state snapshots.
 let vdsRealtimeClient=null, vdsRealtimeChannel=null, vdsRealtimeSite='', vdsRealtimeGeneration=0;
@@ -1082,10 +1082,14 @@ async function vdsStartRealtime(site){
   vdsStartSyncPolling(site);vdsSyncNote('Realtime gagal · mencoba ulang otomatis',3500);vdsScheduleRealtimeRetry(site);
  }
 }
-window.addEventListener('visibilitychange',()=>{
- if(document.visibilityState==='visible'&&currentSite&&vdsAccessToken){
-  if(vdsSyncPollSite===currentSite)vdsPollSyncEvents(currentSite).catch(()=>{});
-  if(!vdsRealtimeConnected&&!vdsRealtimeRetryTimer)vdsScheduleRealtimeRetry(currentSite);
+window.addEventListener('visibilitychange',async()=>{
+ if(document.visibilityState==='visible'&&vdsAccessToken){
+  try{
+   await vdsEnsureFreshSession();
+   if(vdsRealtimeClient)await vdsRealtimeClient.realtime.setAuth(vdsAccessToken);
+   if(currentSite&&vdsSyncPollSite===currentSite)vdsPollSyncEvents(currentSite).catch(()=>{});
+   if(currentSite&&!vdsRealtimeConnected&&!vdsRealtimeRetryTimer)vdsScheduleRealtimeRetry(currentSite);
+  }catch(e){console.warn('[VDS Auth] Sesi belum berhasil diperbarui:',e.message||e);}
  }
 });
 async function vdsCatchupTransactions(site){
@@ -1096,16 +1100,80 @@ async function vdsCatchupTransactions(site){
  state.transactions=[...byId.values()];recalculateCatalogProgressFromTransactions();const h=new Map((state.history||[]).map(x=>[String(x.id),x]));for(const x of (incoming.history||[]))if(!h.has(String(x.id)))h.set(String(x.id),x);state.history=[...h.values()];
  try{localStorage.setItem(siteStateKey(),JSON.stringify(state));}catch(e){}render();
 }
+
+function vdsStoreAuthSession(session){
+ if(!session||!session.access_token)return;
+ vdsAccessToken=session.access_token;
+ if(session.refresh_token)vdsRefreshToken=session.refresh_token;
+ vdsTokenExpiresAt=Number(session.expires_at||0)*1000;
+ if(!vdsTokenExpiresAt&&session.expires_in)vdsTokenExpiresAt=Date.now()+Number(session.expires_in)*1000;
+ try{
+  localStorage.setItem('vds_access_token',vdsAccessToken);
+  sessionStorage.setItem('vds_access_token',vdsAccessToken);
+  if(vdsRefreshToken)localStorage.setItem('vds_refresh_token',vdsRefreshToken);
+  if(vdsTokenExpiresAt)localStorage.setItem('vds_token_expires_at',String(vdsTokenExpiresAt));
+ }catch(e){}
+}
+async function vdsRefreshSession(){
+ if(vdsRefreshPromise)return vdsRefreshPromise;
+ vdsRefreshToken=localStorage.getItem('vds_refresh_token')||vdsRefreshToken||'';
+ if(!vdsRefreshToken)throw new Error('Refresh token belum tersedia. Silakan login sekali setelah pembaruan VDS.');
+ vdsRefreshPromise=(async()=>{
+  const controller=new AbortController();
+  const timeoutId=setTimeout(()=>controller.abort(),30000);
+  let res;
+  try{
+   res=await fetch('https://gmpedvbzmgrpwsgsyszj.supabase.co/auth/v1/token?grant_type=refresh_token',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','apikey':VDS_PUBLISHABLE_KEY},
+    body:JSON.stringify({refresh_token:vdsRefreshToken}),
+    signal:controller.signal
+   });
+  }catch(e){
+   if(e.name==='AbortError')throw new Error('Pembaruan sesi timeout. Periksa koneksi internet.');
+   throw e;
+  }finally{clearTimeout(timeoutId);}
+  let out={};try{out=await res.json()}catch(e){}
+  if(!res.ok||!out.access_token||!out.refresh_token)throw new Error(out.msg||out.message||out.error_description||out.error||'Sesi tidak dapat diperbarui. Silakan login kembali.');
+  const session={access_token:out.access_token,refresh_token:out.refresh_token,expires_in:out.expires_in,expires_at:out.expires_at};
+  vdsStoreAuthSession(session);
+  try{if(vdsRealtimeClient)await vdsRealtimeClient.realtime.setAuth(vdsAccessToken);}catch(e){console.warn('[VDS Auth] Realtime token update:',e);}
+  return session;
+ })();
+ try{return await vdsRefreshPromise;}finally{vdsRefreshPromise=null;}
+}
+async function vdsEnsureFreshSession(force=false){
+ if(!vdsAccessToken)return;
+ if(!vdsRefreshToken)vdsRefreshToken=localStorage.getItem('vds_refresh_token')||'';
+ if(!vdsRefreshToken)return;
+ if(!force&&vdsTokenExpiresAt&&Date.now()<vdsTokenExpiresAt-120000)return;
+ await vdsRefreshSession();
+}
+
 async function vdsApi(action, data={}, token=vdsAccessToken){
- const headers={'Content-Type':'application/json','apikey':VDS_PUBLISHABLE_KEY};
- if(token)headers.Authorization='Bearer '+token;
- const controller=new AbortController();
- const timeoutId=setTimeout(()=>controller.abort(),30000);
- let res;
- try{res=await fetch(VDS_API_URL,{method:'POST',headers,body:JSON.stringify({action,...data}),signal:controller.signal});}
- catch(e){if(e.name==='AbortError')throw new Error('Koneksi cloud timeout (30 detik). Periksa internet atau status Supabase.');throw e;}
- finally{clearTimeout(timeoutId);}
- let out={};try{out=await res.json()}catch(e){}
+ const usesCurrentSession=!!token&&token===vdsAccessToken;
+ if(usesCurrentSession&&action!=='refresh-session'){
+  await vdsEnsureFreshSession();
+  token=vdsAccessToken;
+ }
+ const request=async bearer=>{
+  const headers={'Content-Type':'application/json','apikey':VDS_PUBLISHABLE_KEY};
+  if(bearer)headers.Authorization='Bearer '+bearer;
+  const controller=new AbortController();
+  const timeoutId=setTimeout(()=>controller.abort(),30000);
+  let res;
+  try{res=await fetch(VDS_API_URL,{method:'POST',headers,body:JSON.stringify({action,...data}),signal:controller.signal});}
+  catch(e){if(e.name==='AbortError')throw new Error('Koneksi cloud timeout (30 detik). Periksa internet atau status Supabase.');throw e;}
+  finally{clearTimeout(timeoutId);}
+  let out={};try{out=await res.json()}catch(e){}
+  return {res,out};
+ };
+ let {res,out}=await request(token);
+ const authExpired=!!(out.error&&/sesi tidak valid|sesi login tidak ditemukan|token.*(expired|invalid)|jwt expired/i.test(out.error));
+ if(usesCurrentSession&&authExpired&&vdsRefreshToken){
+  await vdsRefreshSession();
+  ({res,out}=await request(vdsAccessToken));
+ }
  if(!res.ok||out.error)throw new Error(out.error||('HTTP '+res.status));
  return out;
 }
@@ -2285,7 +2353,9 @@ function importExcel(e){const file=e.target.files[0];if(!file)return;if(!window.
   return;
  }
  vdsAccessToken=data.token;
- sessionStorage.setItem('vds_access_token',vdsAccessToken);
+ vdsRefreshToken=data.refreshToken||localStorage.getItem('vds_refresh_token')||'';
+ vdsTokenExpiresAt=Number(data.tokenExpiresAt||localStorage.getItem('vds_token_expires_at')||0);
+ vdsStoreAuthSession({access_token:vdsAccessToken,refresh_token:vdsRefreshToken,expires_at:vdsTokenExpiresAt?Math.floor(vdsTokenExpiresAt/1000):undefined});
  currentUser=data.username;
  currentRole=String(data.role||'user').toLowerCase();
  currentProfile=data.profile||{username:currentUser,role:currentRole};
@@ -2318,7 +2388,7 @@ async function login(){
  const btn=document.querySelector('#login button.primary');if(btn){btn.disabled=true;btn.textContent='MEMERIKSA…';}
  try{
   const out=await vdsApi('login',{username:n,password:p},'');
-  vdsAccessToken=out.session.access_token;localStorage.setItem('vds_access_token',vdsAccessToken);sessionStorage.setItem('vds_access_token',vdsAccessToken);
+  vdsStoreAuthSession(out.session);
   currentProfile=out.user;currentProfile.permissions=normalizePermissions(out.user.permissions);currentUser=out.user.username;currentRole=String(out.user.role||'user').toLowerCase();try{localStorage.setItem('vds_remembered_session',JSON.stringify({username:currentUser,role:currentRole,profile:currentProfile,site:localStorage.getItem('vds_last_site')||''}));}catch(e){}
   // Jangan memuat daftar seluruh akun saat login. Itu request tambahan yang
   // membuat halaman masuk terasa lambat; daftar akun dimuat saat menu Manajemen Akun dibuka.
@@ -2355,7 +2425,7 @@ async function openSite(site, inNewTab=false){
  if(switchToNewTab){
   const handoffKey='vdsWebsiteTabHandoff';
   try{
-   localStorage.setItem(handoffKey,JSON.stringify({token:vdsAccessToken,username:currentUser,role:currentRole,profile:currentProfile,site:site,expires:Date.now()+60000}));
+   localStorage.setItem(handoffKey,JSON.stringify({token:vdsAccessToken,refreshToken:vdsRefreshToken,tokenExpiresAt:vdsTokenExpiresAt,username:currentUser,role:currentRole,profile:currentProfile,site:site,expires:Date.now()+60000}));
   }catch(e){alert('Tidak dapat menyiapkan sesi untuk tab baru: '+e.message);return;}
   const target=location.href.split('#')[0]+'#open-site='+encodeURIComponent(site);
   const opened=window.open(target,'_blank');
@@ -2413,7 +2483,7 @@ async function backToPortal(){
  document.getElementById('app').style.display='none';
  document.getElementById('sitePortal').style.display='grid';
 }
-function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
+function logout(){vdsStopRealtime();currentUser='';currentRole='';currentProfile=null;vdsAccessToken='';vdsRefreshToken='';vdsTokenExpiresAt=0;sessionStorage.removeItem('vds_access_token');localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_refresh_token');localStorage.removeItem('vds_token_expires_at');localStorage.removeItem('vds_remembered_session');try{localStorage.removeItem('biddingViharaPortalSession')}catch(e){}document.getElementById('app').style.display='none';document.getElementById('sitePortal').style.display='none';document.getElementById('login').style.display='grid';document.getElementById('loginPass').value='';document.getElementById('loginError').style.display='none';}
 function total(){return state.transactions.reduce((s,t)=>s+Number(t.total||0),0)}
 function paid(method){return state.transactions.filter(t=>t.payment===method).reduce((s,t)=>s+Number(t.paidAmount??(Number(t.total||0)+Number(t.overpay||0))),0)}
 function unpaid(){return state.transactions.filter(t=>!t.payment).reduce((s,t)=>s+Number(t.total||0),0)}
@@ -2638,7 +2708,7 @@ async function vdsRestoreRememberedSession(){
  const token=localStorage.getItem('vds_access_token')||'';
  let saved=null;try{saved=JSON.parse(localStorage.getItem('vds_remembered_session')||'null')}catch(e){}
  if(!token||!saved||!saved.username||!saved.profile)return;
- vdsAccessToken=token;currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=saved.profile;
+ vdsAccessToken=token;vdsRefreshToken=localStorage.getItem('vds_refresh_token')||'';vdsTokenExpiresAt=Number(localStorage.getItem('vds_token_expires_at')||0);currentUser=saved.username;currentRole=String(saved.role||saved.profile.role||'user').toLowerCase();currentProfile=saved.profile;
  const site=['bidding','dana'].includes(saved.site)?saved.site:(localStorage.getItem('vds_last_site')||'');
  try{
   // A small authenticated read verifies that the stored token is still valid.
@@ -2651,9 +2721,12 @@ async function vdsRestoreRememberedSession(){
    setRoleUI();
   }
  }catch(e){
-  vdsAccessToken='';currentUser='';currentRole='';currentProfile=null;
-  localStorage.removeItem('vds_access_token');localStorage.removeItem('vds_remembered_session');
+  // Jangan hapus sesi tersimpan otomatis. Koneksi sementara yang gagal
+  // tidak boleh membuat pengguna logout; tombol Logout tetap menjadi cara keluar.
+  console.warn('[VDS Auth] Pemulihan sesi tertunda:',e.message||e);
   document.getElementById('login').style.display='grid';
+  const loginError=document.getElementById('loginError');
+  if(loginError){loginError.textContent='Sesi belum dapat diverifikasi. Periksa koneksi atau login kembali jika token lama sudah tidak berlaku.';loginError.style.display='block';}
  }
 }
 Promise.resolve().then(()=>vdsRestoreRememberedSession());

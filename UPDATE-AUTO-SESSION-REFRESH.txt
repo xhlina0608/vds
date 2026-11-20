@@ -1,0 +1,33 @@
+UPDATE AUTO SESSION VDS
+=======================
+
+Tujuan:
+- Sesi VDS diperbarui otomatis menggunakan refresh token Supabase.
+- Tidak ada timer auto-logout karena idle/tidak ada transaksi.
+- Logout hanya dijalankan melalui tombol Logout.
+- Refresh dilakukan saat sesi mendekati kedaluwarsa, saat tab dibuka kembali,
+  atau ketika API mengembalikan tanda access token kedaluwarsa.
+- Pembaruan memakai endpoint Auth Supabase, bukan polling database. Tidak
+  menambah query Realtime atau Log Query database.
+
+File yang diubah:
+- index.html (root repository): penyimpanan refresh token, pembaruan token,
+  pemulihan sesi saat tab kembali aktif, dan penghapusan token saat Logout.
+
+Deploy:
+1. Extract ZIP.
+2. Upload/replace isi repository GitHub VDS dengan isi ZIP.
+3. Pastikan index.html tetap berada di root repository.
+4. Tunggu Vercel selesai deploy.
+5. Setelah deploy, login sekali lagi pada setiap browser/perangkat yang masih
+   memakai sesi versi lama. Sesi lama hanya menyimpan access token dan tidak
+   memiliki refresh token, sehingga tidak dapat diperpanjang.
+6. Setelah login baru, refresh token disimpan dan sesi dapat diperbarui otomatis.
+
+Catatan:
+- Tidak perlu SQL migration atau deploy ulang Supabase Edge Function.
+- Tidak mengubah data, database, Live Sync, atau aturan hak akses.
+- Sesi tetap dapat berakhir jika refresh token dicabut/ditolak oleh Supabase,
+  akun dinonaktifkan, password diubah sehingga sesi dicabut, atau data browser
+  (localStorage) dihapus. Dalam kondisi tersebut login ulang diperlukan.
+- Tombol Logout menghapus access token dan refresh token dari browser.
