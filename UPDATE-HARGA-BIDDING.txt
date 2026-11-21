@@ -1,0 +1,7 @@
+PERBAIKAN HARGA BIDDING
+
+Aturan: Harga Bidding wajib diisi dan harus lebih besar dari Rp0. Jika kosong atau Rp0, transaksi ditolak dan tidak disimpan.
+
+Perubahan hanya pada validasi input transaksi Live Bidding di root index.html. Logika harga Dana Paramita, Supabase, database, Live Sync, dan pengelolaan sesi tidak diubah.
+
+Untuk deploy: ekstrak ZIP, ganti file index.html di root repository GitHub dengan index.html dari ZIP ini, lalu commit/push dan tunggu Vercel selesai deploy.
