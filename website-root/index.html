@@ -70,7 +70,142 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
 .permission-heading{font-weight:800;margin-top:16px;color:#142b40}
 @media(max-width:700px){.permission-grid{grid-template-columns:1fr}}
 @media(max-width:600px){#sitePortal .loginbox>div[style*=grid-template-columns]{grid-template-columns:1fr!important}}
-</style></head><body>
+</style>
+<style id="vds-macbook-print-responsive-final-fix">
+/* Screen: keep the application within the MacBook/browser viewport.
+   Wide tables may scroll inside their own frame; the whole site must not. */
+@media screen {
+  html, body { max-width:100%; overflow-x:hidden !important; }
+  #app.layout {
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+    grid-template-columns:clamp(150px, 17vw, 220px) minmax(0, 1fr) !important;
+  }
+  #app.layout > .side,
+  #app.layout > main,
+  #app.layout > main > #content {
+    min-width:0 !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+  }
+  #app.layout > main { width:100% !important; }
+  #app.layout > main > #content { width:100% !important; overflow-x:hidden !important; }
+  #app #content .panel,
+  #app #content .panelhead,
+  #app #content .toolbar,
+  #app #content .formgrid { min-width:0 !important; max-width:100% !important; }
+  #app #content .tablewrap,
+  #app #content .transaction-tablewrap {
+    width:100% !important; max-width:100% !important; min-width:0 !important;
+    overflow-x:auto !important; overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch;
+  }
+  #app #content .tablewrap table,
+  #app #content .transaction-tablewrap table {
+    max-width:none !important;
+  }
+  #app #content[data-page="invoice"] > .printpanel { min-width:0 !important; max-width:100% !important; }
+  #app #content[data-page="invoice"] #invoicePreview {
+    width:100% !important; max-width:100% !important; min-width:0 !important;
+    overflow:auto !important;
+  }
+  .layout-toolbar { width:100% !important; max-width:100% !important; }
+  .layout-toolbar > div:first-child { min-width:0 !important; max-width:100% !important; flex-wrap:wrap !important; }
+}
+@media screen and (min-width:701px) and (max-width:1100px) {
+  #app.layout { grid-template-columns:160px minmax(0,1fr) !important; }
+  #app.layout > .side { padding-left:9px !important; padding-right:9px !important; }
+  #app.layout > main { padding:12px !important; }
+  #app.layout > main > .top { flex-wrap:wrap !important; }
+  #app.layout > main > .top .actions { flex-wrap:wrap !important; }
+}
+/* Safari/macOS print: use content-height sheets, not a forced 297mm box.
+   This avoids Safari creating an extra blank page after an A4-height element. */
+@media print {
+  @page { size:A4 portrait; margin:0 !important; }
+  html, body {
+    width:auto !important; min-width:0 !important; max-width:none !important;
+    height:auto !important; min-height:0 !important; max-height:none !important;
+    margin:0 !important; padding:0 !important; overflow:visible !important;
+    background:#fff !important;
+    -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
+  }
+  .side, .top, .no-print, .panel:not(.printpanel),
+  .printpanel > .note, .layout-toolbar, .user-print-toolbar,
+  #app #content[data-page="invoice"] > .printpanel > .panelhead {
+    display:none !important;
+  }
+  #app, #app.layout, #app.layout > main, #app.layout > main > #content,
+  #app #content[data-page="invoice"],
+  #app #content[data-page="invoice"] > .printpanel,
+  #app #content[data-page="invoice"] #invoicePreview {
+    display:block !important; width:210mm !important; min-width:0 !important;
+    max-width:210mm !important; height:auto !important; min-height:0 !important;
+    max-height:none !important; margin:0 !important; padding:0 !important;
+    overflow:visible !important; border:0 !important; box-shadow:none !important;
+    transform:none !important;
+  }
+  #app #content[data-page="invoice"] .invoice-paper,
+  #app #content[data-page="invoice"] .invoice-paper:first-child,
+  #app #content[data-page="invoice"] .invoice-paper.invoice-page-2 {
+    display:block !important; position:relative !important; box-sizing:border-box !important;
+    width:210mm !important; min-width:0 !important; max-width:210mm !important;
+    height:auto !important; min-height:0 !important; max-height:none !important;
+    aspect-ratio:auto !important; margin:0 !important; padding:6mm 7mm !important;
+    overflow:hidden !important; background:#fff !important; box-shadow:none !important;
+    transform:none !important; break-before:auto !important; page-break-before:auto !important;
+    break-inside:avoid !important; page-break-inside:avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-set {
+    display:flex !important; flex-direction:column !important; align-items:flex-start !important;
+    gap:5mm !important; width:196mm !important; min-width:0 !important;
+    max-width:196mm !important; height:auto !important; min-height:0 !important;
+    max-height:none !important; margin:0 !important; padding:0 !important; overflow:visible !important;
+  }
+  #app #content[data-page="invoice"] .invoice-copy-wide,
+  #app #content[data-page="invoice"] .invoice-copy-wide .invoice {
+    display:block !important; position:relative !important; box-sizing:border-box !important;
+    width:196mm !important; min-width:196mm !important; max-width:196mm !important;
+    height:83.47mm !important; min-height:83.47mm !important; max-height:83.47mm !important;
+    margin:0 !important; overflow:hidden !important; flex:none !important;
+    break-inside:avoid !important; page-break-inside:avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-copy-third {
+    display:block !important; box-sizing:border-box !important;
+    width:95mm !important; min-width:95mm !important; max-width:95mm !important;
+    height:91.4mm !important; min-height:91.4mm !important; max-height:91.4mm !important;
+    margin:0 !important; overflow:hidden !important; flex:none !important;
+    break-inside:avoid !important; page-break-inside:avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-third {
+    width:95mm !important; height:91.4mm !important; overflow:hidden !important;
+  }
+  #app #content[data-page="invoice"] .invoice img {
+    max-width:none !important; -webkit-print-color-adjust:exact !important;
+    print-color-adjust:exact !important;
+  }
+  #app #content[data-page="invoice"] .invfield,
+  #app #content[data-page="invoice"] .inv3field {
+    -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important;
+  }
+  /* Exactly two intended sheets for Bidding; no forced blank sheet for Dana. */
+  body:not(.site-dana) #app #content[data-page="invoice"] .invoice-paper:first-child {
+    break-after:page !important; page-break-after:always !important;
+  }
+  body:not(.site-dana) #app #content[data-page="invoice"] .invoice-paper.invoice-page-2 {
+    break-before:auto !important; page-break-before:auto !important;
+    break-after:auto !important; page-break-after:auto !important;
+  }
+  body.site-dana #app #content[data-page="invoice"] .invoice-paper,
+  body.site-dana #app #content[data-page="invoice"] .invoice-paper:first-child {
+    break-before:auto !important; page-break-before:auto !important;
+    break-after:auto !important; page-break-after:auto !important;
+  }
+}
+</style>
+
+</head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
 <div id="loginError" style="display:none;color:#b91c1c;font-size:13px;margin-top:10px"></div><button class="primary" style="width:100%;margin-top:18px" onclick="login()">MASUK</button><div class="note" style="margin-top:14px">Gunakan username dan password yang diberikan Admin.</div></div></div>
