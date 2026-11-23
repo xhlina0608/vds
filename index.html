@@ -1114,20 +1114,7 @@ html,body{height:100%;overflow:hidden!important}
 </style>
 
 
-<style id="vds-bidding-copy3-item-fit">
-@media print {
- body:not(.site-dana) #app #content[data-page="invoice"] .invoice-third .inv3item {
-   left:29%!important;
-   width:68%!important;
-   max-width:68%!important;
-   box-sizing:border-box!important;
-   font-size:8px!important;
-   white-space:nowrap!important;
-   overflow:hidden!important;
-   text-overflow:clip!important;
- }
-}
-</style>
+<style id="vds-bidding-copy3-item-fit">/* Copy 3 dimensions are controlled by Admin editor; no fixed width override. */</style>
 
 
 <style id="vds-manual-invoice-wrap-toolbar">
@@ -2486,18 +2473,15 @@ function applyInvoiceLayout(){
    if(el&&v){
     el.style.left=v.left+'%';el.style.top=v.top+'%';el.style.width=v.width+'%';
     // Keep the same numeric font size in preview and print; do not let print CSS shrink copy 3.
-    let appliedSize=Number(v.size)||10;
-    let appliedWidth=Number(v.width)||0;
-    // Lebar mengikuti nilai yang dipilih Admin; tidak ada batas tersembunyi.
-    // Rangkap ke-3 Bidding memakai nota lebih kecil (95mm). Beri ruang cukup
-    // untuk nama barang agar teks tidak terpotong di sisi kanan saat dicetak.
-    if(copyIndex===3 && k==='item'){
-     appliedWidth=Math.max(appliedWidth,68);
-     appliedSize=Math.min(appliedSize,8);
-    }
-    el.style.width=appliedWidth+'%';
+    const appliedSize=Number(v.size)||10;
+    const appliedWidth=Number(v.width)||0;
+    // Semua rangkap, termasuk rangkap kecil ke-3, mengikuti kontrol Admin.
+    // Jangan timpa lebar/font dengan batas khusus copy 3.
+    el.style.setProperty('left',Number(v.left)+'%','important');
+    el.style.setProperty('top',Number(v.top)+'%','important');
+    el.style.setProperty('width',appliedWidth+'%','important');
     el.style.setProperty('font-size',appliedSize+'px','important');
-    el.style.color=v.color;
+    el.style.setProperty('color',v.color||'#111111','important');
     if(k==='bidder'||k==='item')el.classList.toggle('vds-wrap-enabled',!!v.wrap);
    }
   });
@@ -2539,6 +2523,10 @@ function changeInvoiceLayout(prop,value){
  invoiceLayout[k][prop]=prop==='color'||prop==='wrap'?value:Number(value);
  invoiceLayoutCopies[String(activeInvoiceCopy)]=JSON.parse(JSON.stringify(invoiceLayout));
  saveInvoiceLayout();applyInvoiceLayout();
+ const root=document.querySelector(activeInvoiceCopy===3?'.invoice-third[data-copy-index="3"]':'.invoice[data-copy-index="'+activeInvoiceCopy+'"]');
+ const cls=activeInvoiceCopy===3?('inv3'+k):({bidder:'invbidder',amount:'invamount',item:'invitem',no:'invno',cashier:'invcashier'}[k]);
+ const target=root&&root.querySelector('.'+cls);
+ if(target){const v=invoiceLayout[k];target.style.setProperty('width',(Number(v.width)||0)+'%','important');target.style.setProperty('font-size',(Number(v.size)||10)+'px','important');target.style.setProperty('left',Number(v.left)+'%','important');target.style.setProperty('top',Number(v.top)+'%','important');}
 }
 function resetInvoiceLayout(){if(!requirePermission('invoiceDesign'))return;invoiceLayout=normalizeInvoiceLayout(null);invoiceLayoutCopies[String(activeInvoiceCopy)]=JSON.parse(JSON.stringify(invoiceLayout));saveInvoiceLayout();applyInvoiceLayout();loadLayoutControls()}
 function selectInvoice(id){if(!requirePermission('invoice'))return;selectedInvoice=String(id||"");render();const sel=document.getElementById("invoiceSelect");if(sel)sel.value=selectedInvoice}
