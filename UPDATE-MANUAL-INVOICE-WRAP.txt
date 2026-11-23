@@ -1,0 +1,12 @@
+UPDATE EDIT MANUAL NOTA / INVOICE
+
+Untuk Live Bidding dan Dana Paramita:
+- Kolom nama bidder dan nama barang pada editor nota kini memakai text area 2 baris sehingga teks panjang dapat membungkus (wrap text).
+- Toolbar edit diatur menjadi dua tingkat: kontrol pengeditan di baris atas dan tombol aksi di baris bawah.
+- Tombol SIMPAN NOTA dan PRINT NOTA tetap rata kanan.
+- Tidak mengubah data transaksi, format laporan PDF, Supabase, atau Live Sync.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti vds-main/index.html ke index.html root repository GitHub.
+3. Commit/push dan tunggu Vercel selesai deploy.

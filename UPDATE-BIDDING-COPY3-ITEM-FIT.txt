@@ -1,0 +1,14 @@
+PERBAIKAN KHUSUS RANGKAP KE-3 LIVE BIDDING
+
+Berdasarkan PDF hasil cetak, teks nama barang pada nota kecil rangkap ke-3 terpotong di sisi kanan.
+Perbaikan:
+- Lebar kolom nama barang rangkap ke-3 minimal 68% dari nota kecil.
+- Ukuran font kolom tersebut dibatasi 8px agar nama barang lebih muat.
+- Hanya memengaruhi kolom nama barang pada rangkap ke-3 Live Bidding.
+- Tidak mengubah rangkap 1, 2, 4, Dana Paramita, jumlah halaman, database, Supabase, atau Live Sync.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti index.html di root repository GitHub dengan vds-main/index.html.
+3. Commit/push dan tunggu Vercel deploy.
+4. Tes ulang nota Bidding yang sama pada preview PDF.
