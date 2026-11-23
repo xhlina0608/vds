@@ -70,7 +70,12 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
  *{print-color-adjust:exact;-webkit-print-color-adjust:exact}
 }
 @media print{
- .invoice-paper{box-sizing:border-box!important;padding:6mm 7mm 0!important;display:block!important}
+ /* Setiap .invoice-paper tepat satu lembar A4 agar konten tidak mengalir menjadi halaman kosong tambahan. */
+ #invoicePreview{margin-top:0!important}
+ .invoice-paper{box-sizing:border-box!important;width:210mm!important;height:297mm!important;min-height:297mm!important;max-height:297mm!important;padding:6mm 7mm 0!important;margin:0!important;display:block!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important}
+ body:not(.site-dana) .invoice-paper:first-child{break-after:page!important;page-break-after:always!important}
+ body:not(.site-dana) .invoice-paper.invoice-page-2{break-before:auto!important;page-break-before:auto!important;break-after:auto!important;page-break-after:auto!important}
+ body.site-dana .invoice-paper:first-child{break-after:auto!important;page-break-after:auto!important}
  .invoice-set{gap:5mm!important;width:100%!important}
  .invoice-copy-wide:not(:last-child)::after{bottom:-2.6mm;border-bottom:0.25mm dashed #888}
  .invoice-copy-third::before{top:-2.6mm;border-top:0.25mm dashed #888}
@@ -80,7 +85,8 @@ input,select{width:100%;padding:10px 11px;border:1px solid #d8dee7;border-radius
  .invoice-third{width:95mm!important;height:91.4mm!important}
  .inv3field{line-height:1.05!important}
  .inv3bidder{font-size:inherit!important}
- .inv3field{font-size:var(--invoice-copy-font-size, inherit)!important}\n .inv3field:focus{outline:0!important;background:transparent!important}
+ .inv3field{font-size:var(--invoice-copy-font-size, inherit)!important}
+ .inv3field:focus{outline:0!important;background:transparent!important}
 }
 .pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700}
 
