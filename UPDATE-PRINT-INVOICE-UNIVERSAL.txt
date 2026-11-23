@@ -1,0 +1,17 @@
+PERBAIKAN PRINT NOTA/INVOICE UNIVERSAL
+
+Perbaikan khusus Print Nota / Invoice untuk Live Bidding dan Dana Paramita:
+- Menetapkan kanvas cetak A4 portrait dengan ukuran fisik konsisten.
+- Menjaga margin aman internal 7 mm agar printer non-borderless tidak memotong desain.
+- Mengunci ukuran salinan nota sesuai ukuran template yang sudah digunakan.
+- Menghindari scaling/transform dan pemotongan konten oleh layout aplikasi.
+- Menjaga warna/background sejauh browser dan opsi printer mengizinkan.
+
+Tidak mengubah Export PDF laporan, database, SQL, Supabase, atau Live Sync.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti vds-main/index.html ke index.html root repository GitHub.
+3. Commit/push dan tunggu Vercel deploy.
+4. Saat print, pilih kertas A4, Portrait, Scale 100% atau Default, dan matikan browser headers/footers jika muncul.
+5. Jika printer memiliki opsi Borderless, biarkan mati karena template sudah menyediakan margin aman.

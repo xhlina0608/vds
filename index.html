@@ -918,6 +918,128 @@ html,body{height:100%;overflow:hidden!important}
   }
 }
 </style>
+
+<style id="vds-universal-invoice-print-fix">
+/* Universal invoice print layout: fixed A4 canvas, printer-safe inner margins.
+   Scoped to invoice printing only; does not affect PDF reports or other pages. */
+@media print {
+  @page { size: A4 portrait; margin: 0 !important; }
+  html, body {
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #app, #app.layout, #app.layout > main, #app.layout > main > #content,
+  #app #content[data-page="invoice"], #app #content[data-page="invoice"] > .printpanel {
+    display: block !important;
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+  #app #content[data-page="invoice"] .invoice-paper {
+    display: block !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+    width: 210mm !important;
+    min-width: 210mm !important;
+    max-width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 !important;
+    padding: 6mm 7mm !important;
+    overflow: hidden !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    transform: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-set {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 5mm !important;
+    width: 196mm !important;
+    min-width: 196mm !important;
+    max-width: 196mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  #app #content[data-page="invoice"] .invoice-copy-wide,
+  #app #content[data-page="invoice"] .invoice-copy-wide .invoice {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: 196mm !important;
+    min-width: 196mm !important;
+    max-width: 196mm !important;
+    height: 83.47mm !important;
+    min-height: 83.47mm !important;
+    max-height: 83.47mm !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    flex: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-copy-third {
+    box-sizing: border-box !important;
+    width: 95mm !important;
+    min-width: 95mm !important;
+    max-width: 95mm !important;
+    height: 91.4mm !important;
+    min-height: 91.4mm !important;
+    max-height: 91.4mm !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    flex: none !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  #app #content[data-page="invoice"] .invoice-third {
+    width: 95mm !important;
+    height: 91.4mm !important;
+    overflow: hidden !important;
+  }
+  #app #content[data-page="invoice"] .invoice img {
+    max-width: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  #app #content[data-page="invoice"] .invfield,
+  #app #content[data-page="invoice"] .inv3field {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body:not(.site-dana) #app #content[data-page="invoice"] .invoice-paper:first-child {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+  body.site-dana #app #content[data-page="invoice"] .invoice-paper:first-child,
+  #app #content[data-page="invoice"] .invoice-paper.invoice-page-2 {
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
+}
+</style>
+
 </head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
