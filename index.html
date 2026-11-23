@@ -1288,6 +1288,17 @@ html,body{height:100%;overflow:hidden!important}
 }
 </style>
 
+
+<style id="vds-sync-status-print-cleanup">
+/* Status Realtime stays visible on screen at bottom-left, never on paper/print preview. */
+@media print {
+  #vdsSyncStatus {
+    display:none !important;
+    visibility:hidden !important;
+    opacity:0 !important;
+  }
+}
+</style>
 </head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
@@ -1550,7 +1561,7 @@ async function vdsApi(action, data={}, token=vdsAccessToken){
 let vdsSyncNoteTimer=null;
 function vdsSyncNote(message, duration=2600){
  let el=document.getElementById('vdsSyncStatus');
- if(!el){el=document.createElement('div');el.id='vdsSyncStatus';el.style.cssText='position:fixed;right:14px;bottom:12px;z-index:99999;padding:7px 11px;border-radius:9px;background:#173b35;color:white;font:12px Arial;box-shadow:0 3px 12px #0002;transition:opacity .2s;';document.body.appendChild(el);}
+ if(!el){el=document.createElement('div');el.id='vdsSyncStatus';el.style.cssText='position:fixed;left:14px;right:auto;bottom:12px;z-index:99999;padding:7px 11px;border-radius:9px;background:#173b35;color:white;font:12px Arial;box-shadow:0 3px 12px #0002;transition:opacity .2s;';document.body.appendChild(el);}
  if(vdsSyncNoteTimer){clearTimeout(vdsSyncNoteTimer);vdsSyncNoteTimer=null;}
  if(!message){el.style.display='none';return;}
  el.textContent=message;el.style.display='block';el.style.opacity='1';
