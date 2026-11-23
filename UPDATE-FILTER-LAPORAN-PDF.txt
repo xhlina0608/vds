@@ -1,0 +1,17 @@
+UPDATE FILTER LAPORAN PDF
+
+Fitur untuk Live Bidding dan Dana Paramita:
+- Status pembayaran: semua, sudah lunas, belum bayar, pembayaran sebagian.
+- Metode pembayaran: semua, Cash, Transfer, QRIS.
+- Periode: tanggal awal dan tanggal akhir.
+- Daftar transaksi dan rekap PDF mengikuti filter.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti index.html di root repository GitHub dengan vds-main/index.html.
+3. Commit/push dan tunggu Vercel selesai deploy.
+
+Catatan:
+- Filter tanggal memakai createdAt/timestamp/date/transactionDate dari transaksi.
+- Transaksi lama yang tidak memiliki tanggal tidak akan muncul jika filter tanggal dipakai.
+- Tidak ada perubahan SQL, Edge Function, Realtime, atau data Supabase.

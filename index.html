@@ -1598,10 +1598,46 @@ async function renderPdfPages(pageElements, filename, orientation='portrait'){
  pdf.save(filename);
 }
 
+
+function getReportPaymentStatus(t){
+ const total=Number(t.total||0),paid=Number(t.paidAmount??(t.payment?total+Number(t.overpay||0):0));
+ if(paid<=0||/BELUM/i.test(String(t.payment||'')))return 'unpaid';
+ if(paid+0.0001<total)return 'partial';
+ return 'paid';
+}
+function getReportPaymentMethod(t){const p=String(t.payment||'').trim().toUpperCase();return ['CASH','TRANSFER','QRIS'].includes(p)?p:'';}
+function transactionDateForReport(t){const raw=t.createdAt||t.timestamp||t.date||t.transactionDate||'';const d=new Date(raw);return Number.isNaN(d.getTime())?'':d.toISOString().slice(0,10);}
+function choosePdfReportFilters(){
+ return new Promise(resolve=>{
+  const overlay=document.createElement('div');overlay.id='pdfReportFilterOverlay';
+  overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(10,20,35,.58);display:flex;align-items:center;justify-content:center;padding:16px;font-family:Arial,sans-serif';
+  overlay.innerHTML=`<div style="width:min(440px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 55px rgba(0,0,0,.25);color:#17324a">
+   <div style="font-size:19px;font-weight:700;margin-bottom:5px">Filter Laporan PDF</div><div style="font-size:12px;color:#64748b;margin-bottom:18px">Pilih transaksi yang ingin dimasukkan ke laporan.</div>
+   <label style="display:block;font-size:13px;font-weight:700;margin:12px 0 6px">Status pembayaran</label>
+   <select id="pdfFilterStatus" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;background:#fff"><option value="all">Semua status</option><option value="paid">Sudah lunas</option><option value="unpaid">Belum bayar</option><option value="partial">Pembayaran sebagian</option></select>
+   <label style="display:block;font-size:13px;font-weight:700;margin:12px 0 6px">Metode pembayaran</label>
+   <select id="pdfFilterMethod" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;background:#fff"><option value="all">Semua metode</option><option value="CASH">Cash</option><option value="TRANSFER">Transfer</option><option value="QRIS">QRIS</option></select>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label style="display:block;font-size:13px;font-weight:700;margin:12px 0 6px">Dari tanggal</label><input id="pdfFilterFrom" type="date" style="width:100%;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:9px"></div><div><label style="display:block;font-size:13px;font-weight:700;margin:12px 0 6px">Sampai tanggal</label><input id="pdfFilterTo" type="date" style="width:100%;min-width:0;padding:10px;border:1px solid #cbd5e1;border-radius:9px"></div></div>
+   <div style="display:flex;justify-content:flex-end;gap:9px;margin-top:22px;flex-wrap:wrap"><button id="pdfFilterCancel" type="button" style="padding:10px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;color:#334155">Batal</button><button id="pdfFilterAll" type="button" style="padding:10px 16px;border:1px solid #cbd5e1;border-radius:9px;background:#f1f5f9;color:#17324a">Reset Filter</button><button id="pdfFilterApply" type="button" style="padding:10px 17px;border:0;border-radius:9px;background:#17324a;color:#fff;font-weight:700">Export PDF</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const finish=v=>{overlay.remove();resolve(v)};
+  overlay.querySelector('#pdfFilterCancel').onclick=()=>finish(null);
+  overlay.querySelector('#pdfFilterAll').onclick=()=>{overlay.querySelector('#pdfFilterStatus').value='all';overlay.querySelector('#pdfFilterMethod').value='all';overlay.querySelector('#pdfFilterFrom').value='';overlay.querySelector('#pdfFilterTo').value='';};
+  overlay.querySelector('#pdfFilterApply').onclick=()=>{const from=overlay.querySelector('#pdfFilterFrom').value,to=overlay.querySelector('#pdfFilterTo').value;if(from&&to&&from>to){alert('Tanggal awal tidak boleh melewati tanggal akhir.');return;}finish({status:overlay.querySelector('#pdfFilterStatus').value,method:overlay.querySelector('#pdfFilterMethod').value,from,to});};
+  overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});
+ });
+}
+function filterPdfTransactions(rows,f){return rows.filter(t=>{const st=getReportPaymentStatus(t),me=getReportPaymentMethod(t),d=transactionDateForReport(t);if(f.status!=='all'&&st!==f.status)return false;if(f.method!=='all'&&me!==f.method)return false;if(f.from&&(!d||d<f.from))return false;if(f.to&&(!d||d>f.to))return false;return true;});}
+function pdfFilterDescription(f){const st={all:'Semua status',paid:'Sudah lunas',unpaid:'Belum bayar',partial:'Pembayaran sebagian'}[f.status];const me={all:'Semua metode',CASH:'Cash',TRANSFER:'Transfer',QRIS:'QRIS'}[f.method];return st+' | '+me+(f.from||f.to?' | Periode: '+(f.from||'Awal')+' s/d '+(f.to||'Sekarang'):'');}
+
 async function exportPDFDana(){
  if(!isAdmin()){alert('Export PDF laporan keseluruhan hanya tersedia untuk Admin. User hanya dapat export Daftar Harga & Item.');return;}
  if(typeof window.html2pdf!=='function'){alert('Fitur PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
- const rows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
+ const allRows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
+ const filters=await choosePdfReportFilters();if(!filters)return;
+ const rows=filterPdfTransactions(allRows,filters);
+ if(!rows.length){alert('Tidak ada transaksi yang sesuai dengan filter yang dipilih.');return;}
  const money=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
  const sum=arr=>arr.reduce((n,t)=>n+Number(t.total||0),0);
  const sumPaid=arr=>arr.reduce((n,t)=>n+Number(t.paidAmount??(Number(t.total||0)+Number(t.overpay||0))),0);
@@ -1629,7 +1665,7 @@ async function exportPDFDana(){
    return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
     <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">${currentSite==='dana'?'YAYASAN VIHARA DHARMA SHANTI':'YAYASAN VIHARA DHARMA SHANTI'}</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">${currentSite==='dana'?'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI DANA PARAMITA':'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${currentSite==='dana'?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
-    <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}</div>
+    <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
     ${metricHtml}<div style="font:700 15px Arial;color:${reportDark};margin:0 0 10px">${pageIndex===0?'DAFTAR TRANSAKSI':'DAFTAR TRANSAKSI (LANJUTAN)'}</div>
     <table class="transactions" style="width:100%;table-layout:fixed;border-collapse:collapse"><colgroup>${currentSite==='dana'?'<col style="width:7%"><col style="width:7%"><col style="width:19%"><col style="width:13%"><col style="width:12%"><col style="width:5%"><col style="width:12%"><col style="width:12%"><col style="width:13%">':'<col style="width:6%"><col style="width:7%"><col style="width:19%"><col style="width:13%"><col style="width:11%"><col style="width:5%"><col style="width:11%"><col style="width:10%"><col style="width:18%">'}</colgroup><thead><tr>${(currentSite==='dana'?['NO NOTA','ORDER NO','NAMA BARANG','NAMA DONATUR','NOMINAL DANA','QTY','TOTAL','LEBIH BAYAR','PEMBAYARAN']:['NO NOTA','BID NO','NAMA BARANG','NAMA BIDDER','HARGA BIDDING','QTY','TOTAL','LEBIH BAYAR','PEMBAYARAN']).map(x=>`<th style="white-space:nowrap;font-size:11px;padding:8px 6px">${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>${totals}
     <div style="position:absolute;left:42px;right:42px;bottom:17px;border-top:1px solid #dce2e9;padding-top:8px;display:flex;justify-content:space-between;font:10px Arial;color:#8994a1"><span>${currentSite==='dana'?'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Dana Paramita':'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Bidding'}</span><span>2026</span></div>
@@ -1648,7 +1684,7 @@ async function exportPDFDana(){
  <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">YAYASAN VIHARA DHARMA SHANTI</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">TANJUNG BATU&nbsp; | &nbsp;${danaTheme?'SISTEM ADMINISTRASI DANA PARAMITA':'SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${danaTheme?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
  <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${danaTheme?'REKAPITULASI DANA PARAMITA':'REKAPITULASI BIDDING'}</div>
- <div style="font:12px Arial;color:#718096;margin-bottom:20px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${totalPdfPages} dari ${totalPdfPages}</div>
+ <div style="font:12px Arial;color:#718096;margin-bottom:20px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${totalPdfPages} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 26px">${summaryMetrics}</div>
  <div style="font:700 17px Arial;color:${reportDark};margin:0 0 12px">RINCIAN REKAP TRANSAKSI</div>
  <table class="totals" style="width:62%;margin:0 0 0 auto"><tbody>${[['GRAND TOTAL',grand],['TOTAL CASH',cash],['TOTAL TRANSFER',transfer],['TOTAL QRIS',qris],['TOTAL BELUM BAYAR',unpaidTotal]].map((x,i)=>`<tr class="${i===0?'grand':''}"><th>${x[0]}</th><td>${money(x[1])}</td></tr>`).join('')}</tbody></table>
@@ -1671,7 +1707,10 @@ async function exportPDFDana(){
 async function exportPDFBidding(){
  if(!isAdmin()){alert('Export PDF laporan keseluruhan hanya tersedia untuk Admin. User hanya dapat export Daftar Harga & Item.');return;}
  if(typeof window.html2pdf!=='function'){alert('Fitur PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
- const rows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
+ const allRows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
+ const filters=await choosePdfReportFilters();if(!filters)return;
+ const rows=filterPdfTransactions(allRows,filters);
+ if(!rows.length){alert('Tidak ada transaksi yang sesuai dengan filter yang dipilih.');return;}
  const money=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
  const sum=arr=>arr.reduce((n,t)=>n+Number(t.total||0),0);
  const sumPaid=arr=>arr.reduce((n,t)=>n+Number(t.paidAmount??(Number(t.total||0)+Number(t.overpay||0))),0);
@@ -1698,7 +1737,7 @@ async function exportPDFBidding(){
    return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
     <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">${currentSite==='dana'?'YAYASAN VIHARA DHARMA SHANTI':'YAYASAN VIHARA DHARMA SHANTI'}</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">${currentSite==='dana'?'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI DANA PARAMITA':'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${currentSite==='dana'?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
-    <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}</div>
+    <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
     ${metricHtml}<div style="font:700 15px Arial;color:${reportDark};margin:0 0 10px">${pageIndex===0?'DAFTAR TRANSAKSI':'DAFTAR TRANSAKSI (LANJUTAN)'}</div>
     <table class="transactions"><thead><tr>${['NO NOTA','BID NO','NAMA BARANG','NAMA BIDDER','HARGA BIDDING','QTY','TOTAL','LEBIH BAYAR','PEMBAYARAN'].map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table>${totals}
     <div style="position:absolute;left:42px;right:42px;bottom:17px;border-top:1px solid #dce2e9;padding-top:8px;display:flex;justify-content:space-between;font:10px Arial;color:#8994a1"><span>${currentSite==='dana'?'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Dana Paramita':'Yayasan Vihara Dharma Shanti Tanjung Batu | Laporan Bidding'}</span><span>2026</span></div>
@@ -1717,7 +1756,7 @@ async function exportPDFBidding(){
  <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">YAYASAN VIHARA DHARMA SHANTI</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">TANJUNG BATU&nbsp; | &nbsp;${danaTheme?'SISTEM ADMINISTRASI DANA PARAMITA':'SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${danaTheme?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
  <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${danaTheme?'REKAPITULASI DANA PARAMITA':'REKAPITULASI BIDDING'}</div>
- <div style="font:12px Arial;color:#718096;margin-bottom:20px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${totalPdfPages} dari ${totalPdfPages}</div>
+ <div style="font:12px Arial;color:#718096;margin-bottom:20px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${totalPdfPages} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 26px">${summaryMetrics}</div>
  <div style="font:700 17px Arial;color:${reportDark};margin:0 0 12px">RINCIAN REKAP TRANSAKSI</div>
  <table class="totals" style="width:62%;margin:0 0 0 auto"><tbody>${[['GRAND TOTAL',grand],['TOTAL CASH',cash],['TOTAL TRANSFER',transfer],['TOTAL QRIS',qris],['TOTAL BELUM BAYAR',unpaidTotal]].map((x,i)=>`<tr class="${i===0?'grand':''}"><th>${x[0]}</th><td>${money(x[1])}</td></tr>`).join('')}</tbody></table>
