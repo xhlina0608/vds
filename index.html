@@ -1633,9 +1633,9 @@ function pdfFilterDescription(f){const st={all:'Semua status',paid:'Sudah lunas'
 
 async function exportPDFDana(){
  if(!isAdmin()){alert('Export PDF laporan keseluruhan hanya tersedia untuk Admin. User hanya dapat export Daftar Harga & Item.');return;}
- if(typeof window.html2pdf!=='function'){alert('Fitur PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
  const allRows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
  const filters=await choosePdfReportFilters();if(!filters)return;
+ if(typeof window.html2pdf!=='function'){alert('Filter sudah dipilih, tetapi library PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
  const rows=filterPdfTransactions(allRows,filters);
  if(!rows.length){alert('Tidak ada transaksi yang sesuai dengan filter yang dipilih.');return;}
  const money=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
@@ -1648,7 +1648,26 @@ async function exportPDFDana(){
  const unpaidTotal=sum(rows.filter(t=>!t.payment||/BELUM/i.test(String(t.payment))));
  const grand=sum(rows);
  const escHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const perPage=12,pages=[];for(let i=0;i<rows.length;i+=perPage)pages.push(rows.slice(i,i+perPage));if(!pages.length)pages.push([]);const totalPdfPages=pages.length+1;
+ const pages=[];
+ // Pagination adaptif: nama barang/donatur/bidder yang panjang memerlukan lebih banyak tinggi baris.
+ // Maksimum tetap 12 transaksi per halaman, tetapi otomatis dikurangi bila teks membungkus.
+ const estimateReportRowHeight=t=>{
+  const itemLines=Math.max(1,Math.ceil(String(t.itemName||'').length/25));
+  const personLines=Math.max(1,Math.ceil(String(t.bidder||'').length/19));
+  const lines=Math.max(itemLines,personLines);
+  return 30+(lines-1)*14;
+ };
+ const pageHeightBudget=420;let currentPageRows=[],usedHeight=0;
+ for(const row of rows){
+  const rowHeight=estimateReportRowHeight(row);
+  if(currentPageRows.length&&(currentPageRows.length>=12||usedHeight+rowHeight>pageHeightBudget)){
+   pages.push(currentPageRows);currentPageRows=[];usedHeight=0;
+  }
+  currentPageRows.push(row);usedHeight+=rowHeight;
+ }
+ if(currentPageRows.length)pages.push(currentPageRows);
+ if(!pages.length)pages.push([]);
+ const totalPdfPages=pages.length+1;
  const wrapper=document.createElement('div');wrapper.id='biddingReportPdfRoot';
  wrapper.style.cssText='position:relative;display:block;left:auto;top:auto;width:1123px;z-index:1;background:#fff;pointer-events:auto;opacity:1;visibility:visible;color:#17324a;margin:0 auto;';
  const danaTheme=currentSite==='dana';
@@ -1662,7 +1681,7 @@ async function exportPDFDana(){
    const metricHtml='';
    const body=page.map((t,i)=>`<tr style="background:${i%2?'#ffffff':'#f2f6fa'}"><td>${escHtml(t.invoice)}</td><td>${escHtml(t.bidNo)}</td><td class="cjk">${escHtml(t.itemName)}</td><td>${escHtml(t.bidder)}</td><td class="num">${money(t.price)}</td><td class="center">${Number(t.qty||1)}</td><td class="num">${money(t.total)}</td><td class="num">${money(t.overpay||0)}</td><td class="status ${/BELUM/i.test(String(t.payment||'BELUM BAYAR'))?'unpaid':'paid'}">${escHtml(String(t.payment||'BELUM BAYAR').toUpperCase())}</td></tr>`).join('');
    const totals='';
-   return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
+   return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 42px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
     <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">${currentSite==='dana'?'YAYASAN VIHARA DHARMA SHANTI':'YAYASAN VIHARA DHARMA SHANTI'}</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">${currentSite==='dana'?'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI DANA PARAMITA':'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${currentSite==='dana'?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
     <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
@@ -1680,7 +1699,7 @@ async function exportPDFDana(){
  <tr><th>SELISIH CASH</th><td>${money(cashDifference)}</td></tr>
  <tr><th>UANG MASUK REKENING (TRANSFER + QRIS)</th><td>${money(bankActual)}</td></tr>
  </tbody></table></div>`:'';
- const summaryPage=`<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:auto;break-after:auto;position:relative;overflow:hidden">
+ const summaryPage=`<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 42px;background:#fff;page-break-after:auto;break-after:auto;position:relative;overflow:hidden">
  <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">YAYASAN VIHARA DHARMA SHANTI</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">TANJUNG BATU&nbsp; | &nbsp;${danaTheme?'SISTEM ADMINISTRASI DANA PARAMITA':'SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${danaTheme?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
  <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${danaTheme?'REKAPITULASI DANA PARAMITA':'REKAPITULASI BIDDING'}</div>
@@ -1693,7 +1712,7 @@ async function exportPDFDana(){
  </section>`;
  wrapper.innerHTML=`<style>
  @font-face{font-family:'ViharaCJK';src:local('Microsoft YaHei'),local('Noto Sans SC');font-style:normal;font-weight:100 900}
- #biddingReportPdfRoot *{box-sizing:border-box} #biddingReportPdfRoot .reportPage{width:1123px!important;min-width:1123px!important;max-width:none!important;margin:0!important} #biddingReportPdfRoot table{width:100%;min-width:100%;border-collapse:collapse;table-layout:fixed} #biddingReportPdfRoot .transactions th{background:${reportDark};color:#fff;font:700 10px Arial;padding:10px 6px;text-align:left} #biddingReportPdfRoot .transactions td{border:1px solid #d6dee7;padding:8px 6px;font:10.5px Arial;color:#17324a;vertical-align:middle;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;word-break:break-word;line-height:1.25} #biddingReportPdfRoot .transactions th:nth-child(1){width:7%} #biddingReportPdfRoot .transactions th:nth-child(2){width:7%} #biddingReportPdfRoot .transactions th:nth-child(3){width:19%} #biddingReportPdfRoot .transactions th:nth-child(4){width:13%} #biddingReportPdfRoot .transactions th:nth-child(5){width:12%} #biddingReportPdfRoot .transactions th:nth-child(6){width:5%} #biddingReportPdfRoot .transactions th:nth-child(7){width:12%} #biddingReportPdfRoot .transactions th:nth-child(8){width:12%} #biddingReportPdfRoot .transactions th:nth-child(9){width:13%} #biddingReportPdfRoot .transactions td:nth-child(3){white-space:normal;overflow-wrap:anywhere;word-break:break-word} #biddingReportPdfRoot .transactions td.cjk{font-family:'Microsoft YaHei','SimHei','Noto Sans SC',sans-serif;font-size:12px;white-space:normal;overflow-wrap:anywhere;word-break:break-all} #biddingReportPdfRoot .num{text-align:right} #biddingReportPdfRoot .center{text-align:center} #biddingReportPdfRoot .status{font-weight:700;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;text-align:center} #biddingReportPdfRoot .unpaid{color:#c2410c!important} #biddingReportPdfRoot .paid{color:#16804b!important} #biddingReportPdfRoot .totals{width:48%;margin:18px 0 0 auto} #biddingReportPdfRoot .totals th,#biddingReportPdfRoot .totals td{padding:8px 12px;border:1px solid #d6dee7;background:#f2f5f8;font:700 12px Arial;text-align:left} #biddingReportPdfRoot .totals td{text-align:right} #biddingReportPdfRoot .totals .grand th,#biddingReportPdfRoot .totals .grand td{background:${reportDark};color:#fff}
+ #biddingReportPdfRoot *{box-sizing:border-box} #biddingReportPdfRoot .reportPage{width:1123px!important;min-width:1123px!important;max-width:none!important;margin:0!important} #biddingReportPdfRoot table{width:100%;min-width:100%;border-collapse:collapse;table-layout:fixed} #biddingReportPdfRoot .transactions th{background:${reportDark};color:#fff;font:700 10px Arial;padding:10px 6px;text-align:left} #biddingReportPdfRoot .transactions td{border:1px solid #d6dee7;padding:8px 6px;font:10.5px Arial;color:#17324a;vertical-align:middle;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;word-break:break-word;line-height:1.25;max-width:0} #biddingReportPdfRoot .transactions th:nth-child(1){width:7%} #biddingReportPdfRoot .transactions th:nth-child(2){width:7%} #biddingReportPdfRoot .transactions th:nth-child(3){width:19%} #biddingReportPdfRoot .transactions th:nth-child(4){width:13%} #biddingReportPdfRoot .transactions th:nth-child(5){width:12%} #biddingReportPdfRoot .transactions th:nth-child(6){width:5%} #biddingReportPdfRoot .transactions th:nth-child(7){width:12%} #biddingReportPdfRoot .transactions th:nth-child(8){width:12%} #biddingReportPdfRoot .transactions th:nth-child(9){width:13%} #biddingReportPdfRoot .transactions td:nth-child(3){white-space:normal;overflow-wrap:anywhere;word-break:break-word} #biddingReportPdfRoot .transactions td.cjk{font-family:'Microsoft YaHei','SimHei','Noto Sans SC',sans-serif;font-size:12px;white-space:normal;overflow-wrap:anywhere;word-break:break-all} #biddingReportPdfRoot .num{text-align:right} #biddingReportPdfRoot .center{text-align:center} #biddingReportPdfRoot .status{font-weight:700;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;text-align:center} #biddingReportPdfRoot .unpaid{color:#c2410c!important} #biddingReportPdfRoot .paid{color:#16804b!important} #biddingReportPdfRoot .totals{width:48%;margin:18px 0 0 auto} #biddingReportPdfRoot .totals th,#biddingReportPdfRoot .totals td{padding:8px 12px;border:1px solid #d6dee7;background:#f2f5f8;font:700 12px Arial;text-align:left} #biddingReportPdfRoot .totals td{text-align:right} #biddingReportPdfRoot .totals .grand th,#biddingReportPdfRoot .totals .grand td{background:${reportDark};color:#fff}
  </style>${htmlPages}${summaryPage}`;
  document.body.appendChild(wrapper);
  try{
@@ -1706,9 +1725,9 @@ async function exportPDFDana(){
 
 async function exportPDFBidding(){
  if(!isAdmin()){alert('Export PDF laporan keseluruhan hanya tersedia untuk Admin. User hanya dapat export Daftar Harga & Item.');return;}
- if(typeof window.html2pdf!=='function'){alert('Fitur PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
  const allRows=(state.transactions||[]).slice().sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
  const filters=await choosePdfReportFilters();if(!filters)return;
+ if(typeof window.html2pdf!=='function'){alert('Filter sudah dipilih, tetapi library PDF belum termuat. Pastikan internet aktif, lalu refresh halaman.');return;}
  const rows=filterPdfTransactions(allRows,filters);
  if(!rows.length){alert('Tidak ada transaksi yang sesuai dengan filter yang dipilih.');return;}
  const money=n=>'Rp '+Number(n||0).toLocaleString('id-ID');
@@ -1720,7 +1739,26 @@ async function exportPDFBidding(){
  const unpaidTotal=sum(rows.filter(t=>!t.payment||/BELUM/i.test(String(t.payment))));
  const grand=sum(rows);
  const escHtml=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const perPage=12,pages=[];for(let i=0;i<rows.length;i+=perPage)pages.push(rows.slice(i,i+perPage));if(!pages.length)pages.push([]);const totalPdfPages=pages.length+1;
+ const pages=[];
+ // Pagination adaptif: nama barang/donatur/bidder yang panjang memerlukan lebih banyak tinggi baris.
+ // Maksimum tetap 12 transaksi per halaman, tetapi otomatis dikurangi bila teks membungkus.
+ const estimateReportRowHeight=t=>{
+  const itemLines=Math.max(1,Math.ceil(String(t.itemName||'').length/25));
+  const personLines=Math.max(1,Math.ceil(String(t.bidder||'').length/19));
+  const lines=Math.max(itemLines,personLines);
+  return 30+(lines-1)*14;
+ };
+ const pageHeightBudget=420;let currentPageRows=[],usedHeight=0;
+ for(const row of rows){
+  const rowHeight=estimateReportRowHeight(row);
+  if(currentPageRows.length&&(currentPageRows.length>=12||usedHeight+rowHeight>pageHeightBudget)){
+   pages.push(currentPageRows);currentPageRows=[];usedHeight=0;
+  }
+  currentPageRows.push(row);usedHeight+=rowHeight;
+ }
+ if(currentPageRows.length)pages.push(currentPageRows);
+ if(!pages.length)pages.push([]);
+ const totalPdfPages=pages.length+1;
  const wrapper=document.createElement('div');wrapper.id='biddingReportPdfRoot';
  wrapper.style.cssText='position:relative;display:block;left:auto;top:auto;width:1123px;z-index:1;background:#fff;pointer-events:auto;opacity:1;visibility:visible;color:#17324a;margin:0 auto;';
  const danaTheme=currentSite==='dana';
@@ -1734,7 +1772,7 @@ async function exportPDFBidding(){
    const metricHtml='';
    const body=page.map((t,i)=>`<tr style="background:${i%2?'#ffffff':'#f2f6fa'}"><td>${escHtml(t.invoice)}</td><td>${escHtml(t.bidNo)}</td><td class="cjk">${escHtml(t.itemName)}</td><td>${escHtml(t.bidder)}</td><td class="num">${money(t.price)}</td><td class="center">${Number(t.qty||1)}</td><td class="num">${money(t.total)}</td><td class="num">${money(t.overpay||0)}</td><td class="status ${/BELUM/i.test(String(t.payment||'BELUM BAYAR'))?'unpaid':'paid'}">${escHtml(String(t.payment||'BELUM BAYAR').toUpperCase())}</td></tr>`).join('');
    const totals='';
-   return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
+   return `<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 42px;background:#fff;page-break-after:${pageIndex===pages.length-1?'auto':'always'};break-after:${pageIndex===pages.length-1?'auto':'page'};position:relative;overflow:hidden">
     <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">${currentSite==='dana'?'YAYASAN VIHARA DHARMA SHANTI':'YAYASAN VIHARA DHARMA SHANTI'}</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">${currentSite==='dana'?'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI DANA PARAMITA':'TANJUNG BATU&nbsp; | &nbsp;SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${currentSite==='dana'?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
     <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${currentSite==='dana'?'RINCIAN TRANSAKSI DAN REKAPITULASI DANA PARAMITA':'RINCIAN TRANSAKSI DAN REKAPITULASI DANA'}</div><div style="font:12px Arial;color:#718096;margin-bottom:18px">Tanggal export: ${new Date().toLocaleDateString('id-ID')} &nbsp; | &nbsp; Halaman ${pageIndex+1} dari ${totalPdfPages}<br><span style="display:inline-block;margin-top:5px;color:#52657a">Filter: ${pdfFilterDescription(filters)}</span></div>
@@ -1752,7 +1790,7 @@ async function exportPDFBidding(){
  <tr><th>SELISIH CASH</th><td>${money(cashDifference)}</td></tr>
  <tr><th>UANG MASUK REKENING (TRANSFER + QRIS)</th><td>${money(bankActual)}</td></tr>
  </tbody></table></div>`:'';
- const summaryPage=`<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 28px;background:#fff;page-break-after:auto;break-after:auto;position:relative;overflow:hidden">
+ const summaryPage=`<section class="reportPage" style="width:1123px;height:794px;box-sizing:border-box;padding:30px 42px 42px;background:#fff;page-break-after:auto;break-after:auto;position:relative;overflow:hidden">
  <div style="height:7px;background:${reportAccent};margin-bottom:16px"></div>
  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #d8e0e8;padding-bottom:14px;margin-bottom:18px"><div><div style="font:700 27px Arial;color:#17324a">YAYASAN VIHARA DHARMA SHANTI</div><div style="font:600 14px Arial;color:#66788c;margin-top:5px">TANJUNG BATU&nbsp; | &nbsp;${danaTheme?'SISTEM ADMINISTRASI DANA PARAMITA':'SISTEM ADMINISTRASI BIDDING'}</div></div><div style="padding:12px 24px;background:${reportSoft};border:1px solid ${reportBorder};color:${reportAccentText};font:700 13px Arial">${danaTheme?'LAPORAN DANA PARAMITA':'LAPORAN BIDDING'}</div></div>
  <div style="font:700 19px Arial;color:${reportDark};margin-bottom:6px">${danaTheme?'REKAPITULASI DANA PARAMITA':'REKAPITULASI BIDDING'}</div>
@@ -1765,7 +1803,7 @@ async function exportPDFBidding(){
  </section>`;
  wrapper.innerHTML=`<style>
  @font-face{font-family:'ViharaCJK';src:local('Microsoft YaHei'),local('Noto Sans SC');font-style:normal;font-weight:100 900}
- #biddingReportPdfRoot *{box-sizing:border-box} #biddingReportPdfRoot table{width:100%;border-collapse:collapse;table-layout:fixed} #biddingReportPdfRoot .transactions th{background:${reportDark};color:#fff;font:700 10px Arial;padding:10px 6px;text-align:left} #biddingReportPdfRoot .transactions td{border:1px solid #d6dee7;padding:8px 6px;font:10.5px Arial;color:#17324a;vertical-align:middle;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;word-break:break-word;line-height:1.25} #biddingReportPdfRoot .transactions th:nth-child(1){width:7%} #biddingReportPdfRoot .transactions th:nth-child(2){width:6%} #biddingReportPdfRoot .transactions th:nth-child(3){width:20%} #biddingReportPdfRoot .transactions th:nth-child(4){width:13%} #biddingReportPdfRoot .transactions th:nth-child(5){width:12%} #biddingReportPdfRoot .transactions th:nth-child(6){width:5%} #biddingReportPdfRoot .transactions th:nth-child(7){width:12%} #biddingReportPdfRoot .transactions th:nth-child(8){width:12%} #biddingReportPdfRoot .transactions th:nth-child(9){width:13%} #biddingReportPdfRoot .transactions td:nth-child(3){white-space:normal;overflow-wrap:anywhere;word-break:break-word} #biddingReportPdfRoot .transactions td.cjk{font-family:'Microsoft YaHei','SimHei','Noto Sans SC',sans-serif;font-size:12px;white-space:normal;overflow-wrap:anywhere;word-break:break-all} #biddingReportPdfRoot .num{text-align:right} #biddingReportPdfRoot .center{text-align:center} #biddingReportPdfRoot .status{font-weight:700} #biddingReportPdfRoot .unpaid{color:#c2410c!important} #biddingReportPdfRoot .paid{color:#16804b!important} #biddingReportPdfRoot .totals{width:48%;margin:18px 0 0 auto} #biddingReportPdfRoot .totals th,#biddingReportPdfRoot .totals td{padding:8px 12px;border:1px solid #d6dee7;background:#f2f5f8;font:700 12px Arial;text-align:left} #biddingReportPdfRoot .totals td{text-align:right} #biddingReportPdfRoot .totals .grand th,#biddingReportPdfRoot .totals .grand td{background:${reportDark};color:#fff}
+ #biddingReportPdfRoot *{box-sizing:border-box} #biddingReportPdfRoot table{width:100%;border-collapse:collapse;table-layout:fixed} #biddingReportPdfRoot .transactions th{background:${reportDark};color:#fff;font:700 10px Arial;padding:10px 6px;text-align:left} #biddingReportPdfRoot .transactions td{border:1px solid #d6dee7;padding:8px 6px;font:10.5px Arial;color:#17324a;vertical-align:middle;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;word-break:break-word;line-height:1.25;max-width:0} #biddingReportPdfRoot .transactions th:nth-child(1){width:7%} #biddingReportPdfRoot .transactions th:nth-child(2){width:6%} #biddingReportPdfRoot .transactions th:nth-child(3){width:20%} #biddingReportPdfRoot .transactions th:nth-child(4){width:13%} #biddingReportPdfRoot .transactions th:nth-child(5){width:12%} #biddingReportPdfRoot .transactions th:nth-child(6){width:5%} #biddingReportPdfRoot .transactions th:nth-child(7){width:12%} #biddingReportPdfRoot .transactions th:nth-child(8){width:12%} #biddingReportPdfRoot .transactions th:nth-child(9){width:13%} #biddingReportPdfRoot .transactions td:nth-child(3){white-space:normal;overflow-wrap:anywhere;word-break:break-word} #biddingReportPdfRoot .transactions td.cjk{font-family:'Microsoft YaHei','SimHei','Noto Sans SC',sans-serif;font-size:12px;white-space:normal;overflow-wrap:anywhere;word-break:break-all} #biddingReportPdfRoot .num{text-align:right} #biddingReportPdfRoot .center{text-align:center} #biddingReportPdfRoot .status{font-weight:700} #biddingReportPdfRoot .unpaid{color:#c2410c!important} #biddingReportPdfRoot .paid{color:#16804b!important} #biddingReportPdfRoot .totals{width:48%;margin:18px 0 0 auto} #biddingReportPdfRoot .totals th,#biddingReportPdfRoot .totals td{padding:8px 12px;border:1px solid #d6dee7;background:#f2f5f8;font:700 12px Arial;text-align:left} #biddingReportPdfRoot .totals td{text-align:right} #biddingReportPdfRoot .totals .grand th,#biddingReportPdfRoot .totals .grand td{background:${reportDark};color:#fff}
  </style>${htmlPages}${summaryPage}`;
  document.body.appendChild(wrapper);
  try{

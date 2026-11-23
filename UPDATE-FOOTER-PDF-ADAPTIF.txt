@@ -1,0 +1,16 @@
+UPDATE LAPORAN PDF - FOOTER & PAGINASI ADAPTIF
+
+Perbaikan:
+- Jumlah transaksi per halaman tidak lagi dipaksa 12.
+- Maksimal 12 transaksi; otomatis turun menjadi 10, 8, 6, dan seterusnya jika nama barang atau nama donatur/bidder panjang.
+- Tinggi baris diperkirakan dari panjang teks agar tabel tidak masuk ke area footer.
+- Area bawah halaman diperbesar sebagai ruang aman footer.
+- Berlaku untuk PDF Live Bidding dan Dana Paramita.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ambil vds-main/index.html.
+3. Ganti index.html root repository GitHub.
+4. Commit/push dan tunggu Vercel selesai deploy.
+
+Tidak mengubah database, SQL, Supabase, atau kode Live Sync.

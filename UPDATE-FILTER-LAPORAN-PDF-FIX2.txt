@@ -1,0 +1,8 @@
+PERBAIKAN FILTER PDF - FIX 2
+
+Urutan proses diperbaiki: dialog filter ditampilkan segera setelah Admin menekan Export PDF, sebelum pengecekan library html2pdf. Jika library PDF belum termuat, peringatan muncul setelah pilihan filter.
+
+Fitur filter tetap mencakup status pembayaran, metode Cash/Transfer/QRIS, dan periode tanggal.
+Tidak ada perubahan database, SQL, Edge Function, atau Realtime.
+
+Pasang dengan mengganti index.html root repository GitHub memakai vds-main/index.html dari ZIP ini, lalu commit/push dan tunggu Vercel deploy.
