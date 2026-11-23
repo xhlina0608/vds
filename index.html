@@ -2488,8 +2488,7 @@ function applyInvoiceLayout(){
     // Keep the same numeric font size in preview and print; do not let print CSS shrink copy 3.
     let appliedSize=Number(v.size)||10;
     let appliedWidth=Number(v.width)||0;
-    // Kolom nama bidder dibatasi agar tidak bertabrakan dengan kolom nomor/tanggal di kanan.
-    if(k==='bidder') appliedWidth=Math.min(appliedWidth,copyIndex===3?60:45.5);
+    // Lebar mengikuti nilai yang dipilih Admin; tidak ada batas tersembunyi.
     // Rangkap ke-3 Bidding memakai nota lebih kecil (95mm). Beri ruang cukup
     // untuk nama barang agar teks tidak terpotong di sisi kanan saat dicetak.
     if(copyIndex===3 && k==='item'){
