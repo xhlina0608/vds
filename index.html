@@ -1064,6 +1064,55 @@ html,body{height:100%;overflow:hidden!important}
  body.site-dana #app #content[data-page="invoice"] .invoice-copy-wide::after { display:none!important; }
 }
 </style>
+
+<style id="vds-invoice-pagination-correction">
+/* Correct print pagination: let invoice sheets use their real content height.
+   Bidding has 2 intended sheets; Dana Paramita has 1. */
+@media print {
+  #app #content[data-page="invoice"] .invoice-paper,
+  #app #content[data-page="invoice"] .invoice-paper:first-child,
+  #app #content[data-page="invoice"] .invoice-paper.invoice-page-2 {
+    box-sizing:border-box!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    aspect-ratio:auto!important;
+    overflow:visible!important;
+    margin:0!important;
+    padding:6mm 7mm!important;
+    break-before:auto!important;
+    page-break-before:auto!important;
+    break-inside:avoid!important;
+    page-break-inside:avoid!important;
+  }
+  #app #content[data-page="invoice"] .invoice-set {
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+  /* Bidding: the first sheet (copies 1–3) ends page 1; copy 4 starts page 2. */
+  body:not(.site-dana) #app #content[data-page="invoice"] .invoice-paper:first-child {
+    break-after:page!important;
+    page-break-after:always!important;
+  }
+  body:not(.site-dana) #app #content[data-page="invoice"] .invoice-paper.invoice-page-2 {
+    break-before:auto!important;
+    page-break-before:auto!important;
+    break-after:auto!important;
+    page-break-after:auto!important;
+  }
+  /* Dana: one copy, one page; no forced page breaks. */
+  body.site-dana #app #content[data-page="invoice"] .invoice-paper,
+  body.site-dana #app #content[data-page="invoice"] .invoice-paper:first-child {
+    break-before:auto!important;
+    page-break-before:auto!important;
+    break-after:auto!important;
+    page-break-after:auto!important;
+  }
+}
+</style>
+
 </head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>

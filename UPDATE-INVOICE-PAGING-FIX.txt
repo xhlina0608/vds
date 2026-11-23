@@ -1,0 +1,14 @@
+PERBAIKAN PAGINASI PRINT INVOICE
+
+Koreksi atas masalah halaman ganda:
+- Tidak lagi memaksa setiap .invoice-paper setinggi 297mm (A4 penuh).
+- Setiap sheet menggunakan tinggi konten sebenarnya sehingga tidak overflow ke halaman tambahan.
+- Bidding: susunan yang memang dua sheet tetap menjadi 2 halaman (salinan 1-3 di halaman pertama, salinan 4 di halaman kedua).
+- Dana Paramita: satu nota tetap satu halaman.
+- Tidak mengubah ukuran fisik masing-masing nota, database, SQL, Supabase, Live Sync, atau export laporan.
+
+Pemasangan:
+1. Ekstrak ZIP.
+2. Ganti index.html root GitHub dengan vds-main/index.html.
+3. Commit/push dan tunggu Vercel selesai deploy.
+4. Tes Preview dengan A4, Portrait, Scale 100%.
