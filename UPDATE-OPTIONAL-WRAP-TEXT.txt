@@ -1,0 +1,2 @@
+Wrap Text is now an optional Admin checkbox in the invoice design toolbar. Default OFF. Admin selects bidder/item field and toggles ON to wrap long text into two lines; OFF keeps one line. Setting is saved with per-copy/per-site invoice layout. Toolbar remains two-row responsive with Save/Print actions right-aligned. No database/Supabase/Realtime changes.
+Install by replacing repository root index.html with vds-main/index.html from this ZIP.
