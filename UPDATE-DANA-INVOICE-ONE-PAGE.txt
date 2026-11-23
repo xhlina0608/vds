@@ -1,0 +1,7 @@
+FIX PRINT INVOICE DANA PARAMITA - 1 HALAMAN
+
+Perbaikan lanjutan khusus Dana Paramita: nota hanya memiliki satu salinan, sehingga CSS tidak lagi memaksa kontainer invoice setinggi satu halaman A4 penuh. Aturan page-break dinonaktifkan khusus invoice Dana agar browser tidak membuat halaman kedua kosong. Ukuran fisik nota tetap 196 x 83.47 mm.
+
+Live Bidding tetap memakai dua halaman sesuai layout rangkap yang sudah ada. Laporan PDF, Supabase, dan Live Sync tidak diubah.
+
+Pasang dengan mengganti vds-main/index.html ke index.html root repository GitHub, lalu commit/push dan tunggu Vercel deploy.

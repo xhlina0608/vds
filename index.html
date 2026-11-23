@@ -1040,6 +1040,30 @@ html,body{height:100%;overflow:hidden!important}
 }
 </style>
 
+
+<style id="vds-dana-single-invoice-one-page-fix">
+/* Dana Paramita prints one invoice copy: do not force a full-height A4 box that can spill to page 2. */
+@media print {
+ body.site-dana #app #content[data-page="invoice"] .invoice-paper,
+ body.site-dana #app #content[data-page="invoice"] .invoice-paper:first-child {
+   height:auto!important; min-height:0!important; max-height:none!important;
+   break-before:auto!important; page-break-before:auto!important;
+   break-after:auto!important; page-break-after:auto!important;
+   break-inside:avoid!important; page-break-inside:avoid!important;
+   overflow:visible!important;
+ }
+ body.site-dana #app #content[data-page="invoice"] .invoice-set {
+   display:block!important; height:auto!important; min-height:0!important;
+   break-after:auto!important; page-break-after:auto!important;
+ }
+ body.site-dana #app #content[data-page="invoice"] .invoice-copy-wide,
+ body.site-dana #app #content[data-page="invoice"] .invoice-copy-wide .invoice {
+   height:83.47mm!important; min-height:83.47mm!important; max-height:83.47mm!important;
+   break-inside:avoid!important; page-break-inside:avoid!important;
+ }
+ body.site-dana #app #content[data-page="invoice"] .invoice-copy-wide::after { display:none!important; }
+}
+</style>
 </head><body>
 <div id="login" class="login"><div class="loginbox"><h1>SIAKANG VDS</h1><p>Masuk ke website</p>
 <div class="field"><label>Username</label><input id="loginName" placeholder="Masukkan username" autocomplete="username" onkeydown="if(event.key==='Enter')login()"></div><div class="field" style="margin-top:12px"><label>Password</label><input id="loginPass" type="password" placeholder="Masukkan password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div>
