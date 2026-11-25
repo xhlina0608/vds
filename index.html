@@ -2416,16 +2416,16 @@ async function exportDanaExcelPreservingTemplate(){
   // DATABASE ITEM menggunakan formula asli yang mengambil data dari DAFTAR HARGA.
   // LIVE LAPORAN DANA: isi hanya kolom input; formula lookup, total, rekap dan format tetap utuh.
   const liveDoc=await getSheet('LIVE LAPORAN DANA');
-  const tx=state.transactions||[];
+  // Urutkan transaksi berdasarkan nomor nota seperti laporan PDF.
+  // Kolom B adalah ORDER NO / BID NO transaksi, bukan nomor item dari master barang.
+  const tx=[...(state.transactions||[])].sort((a,b)=>(Number(a.invoice)||0)-(Number(b.invoice)||0));
   const priceRows=state.prices||[];
   const normName=v=>String(v??'').trim().toLocaleLowerCase();
   for(let i=0;i<500;i++){
     const r=2+i,t=tx[i];
-    // Template asli memakai NO DANA (kolom B) sebagai nomor item,
-    // bukan BID NO transaksi. Kolom C dan E mengambil nama/harga via formula.
     const matchedItem=t?priceRows.find(p=>normName(p.name)===normName(t.itemName)):null;
-    const itemNo=matchedItem?.no??'';
-    setCell(liveDoc,'B'+r,itemNo===''?'':Number(itemNo));
+    // Samakan nomor dengan kolom ORDER NO di Dana Paramita dan BID NO di Live Bidding.
+    setCell(liveDoc,'B'+r,t?.bidNo??'');
     // Isi hasil lookup secara langsung agar nama/harga tidak bergantung
     // pada formula lintas-sheet yang tidak dihitung oleh browser saat export.
     setCell(liveDoc,'C'+r,t?.itemName??matchedItem?.name??'');
